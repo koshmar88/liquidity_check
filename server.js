@@ -13,7 +13,7 @@ const pools = [
 ];
 
 console.log("🔌 RPC URL:", process.env.RPC_URL);
-const provider = new ethers.providers.JsonRpcProvider(process.env.RPC_URL);
+const provider = new ethers.providers.JsonRpcProvider("https://eth-mainnet.g.alchemy.com/v2/7QH7n3H4DakNuBQsKL8IcLRHDTGzG_oJ");
 
 const lastCashValues = {};
 
