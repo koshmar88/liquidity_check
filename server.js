@@ -1,3 +1,13 @@
+(async () => {
+  try {
+    const provider = new ethers.providers.JsonRpcProvider("https://eth-mainnet.g.alchemy.com/v2/7QH7n3H4DakNuBQsKL8IcLRHDTGzG_oJ");
+    const block = await provider.getBlockNumber();
+    console.log("✅ Сеть работает, текущий блок:", block);
+  } catch (e) {
+    console.error("❌ Ошибка подключения к сети:", e.message);
+  }
+})();
+
 const ethers = require("ethers");
 const axios = require("axios");
 
