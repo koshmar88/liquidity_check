@@ -1,10 +1,21 @@
 const ethers = require("ethers");
 const axios = require("axios");
+const fs = require("fs");
 
-// Telegram config
+// 🟢 Telegram config
 const BOT_TOKEN = "7957204455:AAEzvFeEQdyMejrGx87YJHkPPWPJpYsDj-g";
-let ACTIVE_CHAT_ID = null; // будет установлен после /start или /status
+const CHAT_FILE = "./chat_id.txt";
 
+// 🟢 Загружаем chat_id (если был сохранён)
+let ACTIVE_CHAT_ID = null;
+if (fs.existsSync(CHAT_FILE)) {
+  ACTIVE_CHAT_ID = fs.readFileSync(CHAT_FILE, "utf-8").trim();
+  console.log("✅ Загружен chat_id:", ACTIVE_CHAT_ID);
+} else {
+  console.log("⚠️ chat_id не найден, бот пока не знает, кому слать уведомления.");
+}
+
+// 🟢 Настройки
 const THRESHOLD_USD = 1000;
 const CHECK_INTERVAL_MS = 60_000;
 
@@ -14,11 +25,11 @@ const pools = [
   { name: "DAI", address: "0x8e595470Ed749b85C6F7669de83EAe304C2ec68F", decimals: 18 },
 ];
 
+// 🟢 Подключаем RPC
 const provider = new ethers.providers.JsonRpcProvider(
   "https://eth-mainnet.g.alchemy.com/v2/7QH7n3H4DakNuBQsKL8IcLRHDTGzG_oJ"
 );
-
-console.log("🔌 Подключение к RPC:", provider.connection.url);
+console.log("🔌 RPC подключение:", provider.connection.url);
 
 const lastCashValues = {};
 
@@ -32,7 +43,7 @@ async function sendTelegramMessage(text, chatId = ACTIVE_CHAT_ID) {
   console.log("📬 Отправка в Telegram →", chatId, "|", text);
 
   if (!chatId) {
-    console.warn("⚠️ Нет активного chat_id, сообщение не отправлено.");
+    console.warn("⚠️ Нет активного chat_id — сообщение не отправлено.");
     return;
   }
 
@@ -42,7 +53,7 @@ async function sendTelegramMessage(text, chatId = ACTIVE_CHAT_ID) {
       text,
     });
   } catch (err) {
-    console.error("❌ Ошибка отправки сообщения:", err.response?.data || err.message);
+    console.error("❌ Ошибка отправки:", err.response?.data || err.message);
   }
 }
 
@@ -66,7 +77,7 @@ async function checkLiquidity() {
 
       lastCashValues[pool.name] = currentCash;
     } catch (err) {
-      console.error(`⚠️ Ошибка обработки пула ${pool.name}:`, err.message);
+      console.error(`⚠️ Ошибка пула ${pool.name}:`, err.message);
     }
   }
 }
@@ -84,11 +95,13 @@ async function handleBotCommands() {
 
     if (!message || !userId) return;
 
-    // Сохраняем активный chat_id
-    ACTIVE_CHAT_ID = userId;
-
-    // Отмечаем update как обработанный
+    // Отмечаем как обработанное
     await axios.get(`https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=${lastUpdate.update_id + 1}`);
+
+    // Сохраняем chat_id
+    ACTIVE_CHAT_ID = userId;
+    fs.writeFileSync(CHAT_FILE, String(userId));
+    console.log("💾 chat_id сохранён:", userId);
 
     if (message === "/status") {
       let text = "📊 Ликвидность по пулам:\n";
@@ -102,18 +115,18 @@ async function handleBotCommands() {
       }
       await sendTelegramMessage(text, userId);
     } else if (message === "/start") {
-      await sendTelegramMessage("Привет! Я буду уведомлять тебя о крупной ликвидности.\nКоманда: /status", userId);
+      await sendTelegramMessage("👋 Привет! Я буду уведомлять тебя о резких изменениях ликвидности. Используй команду /status для проверки.", userId);
     }
   } catch (err) {
-    console.error("❌ Ошибка при обработке команд:", err.response?.data || err.message);
+    console.error("❌ Ошибка при команде:", err.response?.data || err.message);
   }
 }
 
-// ⏱ Запуск циклов
+// 🟢 Стартуем циклы
 setInterval(checkLiquidity, CHECK_INTERVAL_MS);
 setInterval(handleBotCommands, 8000);
 
-// Первый вызов
+// Первый запуск
 setTimeout(() => {
   checkLiquidity();
   handleBotCommands();
