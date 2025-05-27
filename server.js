@@ -12,7 +12,9 @@ const pools = [
   { name: "DAI",  address: "0x8e595470Ed749b85C6F7669de83EAe304C2ec68F", decimals: 18 }
 ];
 
-const provider = new ethers.providers.JsonRpcProvider("https://rpc.ankr.com/eth");
+console.log("🔌 RPC URL:", process.env.RPC_URL);
+const provider = new ethers.providers.JsonRpcProvider(process.env.RPC_URL);
+
 const lastCashValues = {};
 
 async function getCash(pool) {
