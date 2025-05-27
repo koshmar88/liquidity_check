@@ -2,34 +2,32 @@ const ethers = require("ethers");
 const axios = require("axios");
 const fs = require("fs");
 
-// 🟢 Telegram config
-const BOT_TOKEN = "7957204455:AAEzvFeEQdyMejrGx87YJHkPPWPJpYsDj-g";
-const CHAT_FILE = "./chat_id.txt";
+// === 🔐 Конфигурация из переменных окружения ===
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const RPC_URL = process.env.RPC_URL;
+const STATIC_CHAT_ID = process.env.STATIC_CHAT_ID?.trim();
+const THRESHOLD_USD = parseFloat(process.env.THRESHOLD_USD || "1000");
+const CHECK_INTERVAL_MS = parseInt(process.env.CHECK_INTERVAL_MS || "60000");
 
-// 🟢 Загружаем chat_id (если был сохранён)
-let ACTIVE_CHAT_ID = null;
-if (fs.existsSync(CHAT_FILE)) {
-  ACTIVE_CHAT_ID = fs.readFileSync(CHAT_FILE, "utf-8").trim();
-  console.log("✅ Загружен chat_id:", ACTIVE_CHAT_ID);
+if (!BOT_TOKEN || !RPC_URL) {
+  console.error("❌ Отсутствует BOT_TOKEN или RPC_URL в окружении.");
+  process.exit(1);
+}
+
+const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+let ACTIVE_CHAT_ID = STATIC_CHAT_ID || null;
+
+if (ACTIVE_CHAT_ID) {
+  console.log("✅ Загружен chat_id из STATIC_CHAT_ID:", ACTIVE_CHAT_ID);
 } else {
   console.log("⚠️ chat_id не найден, бот пока не знает, кому слать уведомления.");
 }
 
-// 🟢 Настройки
-const THRESHOLD_USD = 1000;
-const CHECK_INTERVAL_MS = 60_000;
-
 const pools = [
   { name: "USDT", address: "0x48759F220ED983dB51fA7A8C0D2AAb8f3ce4166a", decimals: 6 },
   { name: "USDC", address: "0x76Eb2FE28b36B3ee97F3Adae0C69606eeDB2A37c", decimals: 6 },
-  { name: "DAI", address: "0x8e595470Ed749b85C6F7669de83EAe304C2ec68F", decimals: 18 },
+  { name: "DAI",  address: "0x8e595470Ed749b85C6F7669de83EAe304C2ec68F", decimals: 18 },
 ];
-
-// 🟢 Подключаем RPC
-const provider = new ethers.providers.JsonRpcProvider(
-  "https://eth-mainnet.g.alchemy.com/v2/7QH7n3H4DakNuBQsKL8IcLRHDTGzG_oJ"
-);
-console.log("🔌 RPC подключение:", provider.connection.url);
 
 const lastCashValues = {};
 
@@ -40,20 +38,19 @@ async function getCash(pool) {
 }
 
 async function sendTelegramMessage(text, chatId = ACTIVE_CHAT_ID) {
-  console.log("📬 Отправка в Telegram →", chatId, "|", text);
-
   if (!chatId) {
-    console.warn("⚠️ Нет активного chat_id — сообщение не отправлено.");
+    console.warn("⚠️ Нет chat_id, пропуск отправки:", text);
     return;
   }
 
+  console.log("📬 Отправка в Telegram →", chatId, "|", text);
   try {
     await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       chat_id: chatId,
       text,
     });
   } catch (err) {
-    console.error("❌ Ошибка отправки:", err.response?.data || err.message);
+    console.error("❌ Ошибка отправки сообщения:", err.response?.data || err.message);
   }
 }
 
@@ -77,7 +74,7 @@ async function checkLiquidity() {
 
       lastCashValues[pool.name] = currentCash;
     } catch (err) {
-      console.error(`⚠️ Ошибка пула ${pool.name}:`, err.message);
+      console.error(`⚠️ Ошибка обработки пула ${pool.name}:`, err.message);
     }
   }
 }
@@ -95,13 +92,13 @@ async function handleBotCommands() {
 
     if (!message || !userId) return;
 
-    // Отмечаем как обработанное
+    // Не отвечать повторно
     await axios.get(`https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=${lastUpdate.update_id + 1}`);
 
-    // Сохраняем chat_id
-    ACTIVE_CHAT_ID = userId;
-    fs.writeFileSync(CHAT_FILE, String(userId));
-    console.log("💾 chat_id сохранён:", userId);
+    if (!ACTIVE_CHAT_ID) {
+      ACTIVE_CHAT_ID = userId.toString();
+      console.log("💾 chat_id сохранён:", ACTIVE_CHAT_ID);
+    }
 
     if (message === "/status") {
       let text = "📊 Ликвидность по пулам:\n";
@@ -118,16 +115,23 @@ async function handleBotCommands() {
       await sendTelegramMessage("👋 Привет! Я буду уведомлять тебя о резких изменениях ликвидности. Используй команду /status для проверки.", userId);
     }
   } catch (err) {
-    console.error("❌ Ошибка при команде:", err.response?.data || err.message);
+    console.error("❌ Ошибка при обработке команд:", err.response?.data || err.message);
   }
 }
 
-// 🟢 Стартуем циклы
+// Тест подключения к сети
+(async () => {
+  try {
+    const block = await provider.getBlockNumber();
+    console.log("✅ Сеть работает, текущий блок:", block);
+  } catch (e) {
+    console.error("❌ Ошибка подключения к сети:", e.message);
+  }
+})();
+
+// Запуск циклов
 setInterval(checkLiquidity, CHECK_INTERVAL_MS);
 setInterval(handleBotCommands, 8000);
 
-// Первый запуск
-setTimeout(() => {
-  checkLiquidity();
-  handleBotCommands();
-}, 3000);
+checkLiquidity();
+handleBotCommands();
