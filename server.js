@@ -30,6 +30,8 @@ async function getCash(pool) {
 
 // Отправить сообщение в Telegram
 async function sendTelegramMessage(text, chatId = CHAT_ID) {
+  console.log("📬 Отправка в Telegram →", chatId, "|", text);
+
   try {
     await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       chat_id: chatId,
@@ -55,7 +57,8 @@ async function checkLiquidity() {
           const direction = diff > 0 ? "добавлена" : "изъята";
           const message = `💧 В пуле ${pool.name} ${direction} ликвидность: ${diff.toFixed(2)} USD`;
           console.log(message);
-          await sendTelegramMessage(message);
+          await sendTelegramMessage(message, "363708896"); // явно передаём
+
         }
       }
 
