@@ -1,38 +1,34 @@
-(async () => {
-  try {
-    const provider = new ethers.providers.JsonRpcProvider("https://eth-mainnet.g.alchemy.com/v2/7QH7n3H4DakNuBQsKL8IcLRHDTGzG_oJ");
-    const block = await provider.getBlockNumber();
-    console.log("✅ Сеть работает, текущий блок:", block);
-  } catch (e) {
-    console.error("❌ Ошибка подключения к сети:", e.message);
-  }
-})();
-
 const ethers = require("ethers");
 const axios = require("axios");
 
+// Telegram & настройки
 const BOT_TOKEN = "7957204455:AAEzvFeEQdyMejrGx87YJHkPPWPJpYsDj-g";
 const CHAT_ID = "363708896";
 const THRESHOLD_USD = 1000;
 const CHECK_INTERVAL_MS = 60_000;
 
+// Пулы
 const pools = [
   { name: "USDT", address: "0x48759F220ED983dB51fA7A8C0D2AAb8f3ce4166a", decimals: 6 },
   { name: "USDC", address: "0x76Eb2FE28b36B3ee97F3Adae0C69606eeDB2A37c", decimals: 6 },
   { name: "DAI",  address: "0x8e595470Ed749b85C6F7669de83EAe304C2ec68F", decimals: 18 }
 ];
 
-console.log("🔌 RPC URL:", process.env.RPC_URL);
+// Ethereum провайдер (Alchemy)
 const provider = new ethers.providers.JsonRpcProvider("https://eth-mainnet.g.alchemy.com/v2/7QH7n3H4DakNuBQsKL8IcLRHDTGzG_oJ");
+console.log("🔌 RPC подключение создано:", provider.connection?.url);
 
+// Хранилище для последней ликвидности
 const lastCashValues = {};
 
+// Получить ликвидность пула
 async function getCash(pool) {
   const cToken = new ethers.Contract(pool.address, ["function getCash() view returns (uint256)"], provider);
   const rawCash = await cToken.getCash();
   return parseFloat(ethers.utils.formatUnits(rawCash, pool.decimals));
 }
 
+// Отправить сообщение в Telegram
 async function sendTelegramMessage(text, chatId = CHAT_ID) {
   try {
     await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
@@ -40,10 +36,11 @@ async function sendTelegramMessage(text, chatId = CHAT_ID) {
       text,
     });
   } catch (err) {
-    console.error("❌ Ошибка отправки сообщения:", err.message);
+    console.error("❌ Ошибка отправки сообщения:", err.response?.data || err.message);
   }
 }
 
+// Проверка ликвидности
 async function checkLiquidity() {
   console.log("🔍 Проверка ликвидности...");
 
@@ -69,7 +66,7 @@ async function checkLiquidity() {
   }
 }
 
-// 👇 Добавляем поддержку команды /status
+// Обработка команд Telegram
 async function handleBotCommands() {
   try {
     const res = await axios.get(`https://api.telegram.org/bot${BOT_TOKEN}/getUpdates`);
@@ -83,7 +80,6 @@ async function handleBotCommands() {
 
     if (!message || !userId) return;
 
-    // чтобы бот не повторно отвечал — отметим update_id
     await axios.get(`https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=${lastUpdate.update_id + 1}`);
 
     if (message === "/status") {
@@ -101,13 +97,16 @@ async function handleBotCommands() {
       await sendTelegramMessage("Привет! Я уведомляю об изменении ликвидности. Команда: /status", userId);
     }
   } catch (err) {
-    console.error("❌ Ошибка при обработке команд:", err.message);
+    console.error("❌ Ошибка при обработке команд:", err.response?.data || err.message);
   }
 }
 
-// запускаем циклы
+// ⏱ Запуск циклов
 setInterval(checkLiquidity, CHECK_INTERVAL_MS);
-setInterval(handleBotCommands, 8000); // проверка команд каждые 8 секунд
+setInterval(handleBotCommands, 8000);
 
-checkLiquidity();
-handleBotCommands();
+// 🕒 Первый запуск с задержкой
+setTimeout(() => {
+  checkLiquidity();
+  handleBotCommands();
+}, 3000);
