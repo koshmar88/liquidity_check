@@ -1,0 +1,13 @@
+{
+  "name": "liquidity-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot to monitor USDT, USDC, DAI liquidity",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "ethers": "^5.7.2"
+  }
+}
