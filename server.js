@@ -135,6 +135,11 @@ async function handleBotCommands() {
 
       await sendTelegramMessage(text, userId);
     } // ← вот эта закрывает if (message === "/hf")
+      } catch (err) {
+    console.error("❌ Ошибка при обработке команд:", err.response?.data || err.message);
+  }
+} // ← вот эта закрывает всю функцию handleBotCommands
+
 
 // Тест подключения к сети
 (async () => {
