@@ -22,7 +22,6 @@ if (ACTIVE_CHAT_ID) {
 } else {
   console.log("⚠️ chat_id не найден, бот пока не знает, кому слать уведомления.");
 }
-xq
 const pools = [
   { name: "USDT", address: "0x48759F220ED983dB51fA7A8C0D2AAb8f3ce4166a", decimals: 6 },
   { name: "USDC", address: "0x76Eb2FE28b36B3ee97F3Adae0C69606eeDB2A37c", decimals: 6 },
@@ -115,11 +114,39 @@ async function handleBotCommands() {
       await sendTelegramMessage(text, userId);
     } else if (message === "/start") {
       await sendTelegramMessage("👋 Привет! Я буду уведомлять тебя о резких изменениях ликвидности. Используй команду /status для проверки.", userId);
+    } else if (message === "/hf") {
+      try {
+        const comptrollerAddress = "0xAB1c342C7bf5Ec5F02ADEA1c2270670bCa144CbB";
+        const comptrollerAbi = [
+          "function getAccountLiquidity(address) view returns (uint, uint, uint)"
+        ];
+        const contract = new ethers.Contract(comptrollerAddress, comptrollerAbi, provider);
+        const [error, liquidity, shortfall] = await contract.getAccountLiquidity(selfMonitor.address);
+
+        if (!error.eq(0)) {
+          await sendTelegramMessage(`❌ Ошибка получения HF: ${error.toString()}`, userId);
+          return;
+        }
+
+        let hf = 0;
+        if (shortfall.gt(0)) {
+          hf = "0.0";
+        } else if (liquidity.eq(0)) {
+          hf = "1.0";
+        } else {
+          hf = "∞";
+        }
+
+        await sendTelegramMessage(`🩺 Твой Health Factor: ${hf}`, userId);
+      } catch (err) {
+        await sendTelegramMessage(`❌ Ошибка при расчете HF: ${err.message}`, userId);
+      }
     }
   } catch (err) {
     console.error("❌ Ошибка при обработке команд:", err.response?.data || err.message);
   }
 }
+
 
 // Тест подключения к сети
 (async () => {
@@ -130,10 +157,54 @@ async function handleBotCommands() {
     console.error("❌ Ошибка подключения к сети:", e.message);
   }
 })();
+const selfMonitor = {
+  address: "0x2a4cE5BaCcB98E5F95D37F8B3D1065754E0389CD",
+  lastStatus: "safe"
+};
+async function checkSelfHealth() {
+  const comptrollerAddress = "0xAB1c342C7bf5Ec5F02ADEA1c2270670bCa144CbB";
+  const comptrollerAbi = [
+    "function getAccountLiquidity(address) view returns (uint, uint, uint)"
+  ];
+  const contract = new ethers.Contract(comptrollerAddress, comptrollerAbi, provider);
+
+  try {
+    const [error, liquidity, shortfall] = await contract.getAccountLiquidity(selfMonitor.address);
+
+    if (!error.eq(0)) {
+      console.error("❌ Ошибка получения HF:", error.toString());
+      return;
+    }
+
+    let hf = 0;
+    if (shortfall.gt(0)) {
+      hf = 0;
+    } else if (liquidity.eq(0)) {
+      hf = 1;
+    } else {
+      hf = "∞";
+    }
+
+    console.log(`🧍 Мой HF: ${hf}`);
+
+    if (hf === 0 && selfMonitor.lastStatus !== "danger") {
+      await sendTelegramMessage(`⚠️ Внимание! Твой Health Factor упал до 0.0 — ликвидация близко!`);
+      selfMonitor.lastStatus = "danger";
+    } else if (hf !== 0 && selfMonitor.lastStatus !== "safe") {
+      await sendTelegramMessage(`✅ HF восстановился: ${hf}`);
+      selfMonitor.lastStatus = "safe";
+    }
+  } catch (err) {
+    console.error("❌ Ошибка self-monitoring:", err.message);
+  }
+}
+
 
 // Запуск циклов
 setInterval(checkLiquidity, CHECK_INTERVAL_MS);
 setInterval(handleBotCommands, 8000);
+setInterval(checkSelfHealth, CHECK_INTERVAL_MS);
 
 checkLiquidity();
 handleBotCommands();
+checkSelfHealth();
