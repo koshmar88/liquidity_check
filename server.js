@@ -114,7 +114,7 @@ async function handleBotCommands() {
       await sendTelegramMessage(text, userId);
     } else if (message === "/start") {
       await sendTelegramMessage("👋 Привет! Я буду уведомлять тебя о резких изменениях ликвидности. Используй команду /status для проверки.", userId);
-    } else if (message === "/hf") {
+     } else if (message === "/hf") {
       const ethPrice = await getEthPrice();
       const { hf, collateral, borrow, breakdown, liquidationEthPrice } = await calculateHealthFactor();
 
@@ -134,7 +134,7 @@ async function handleBotCommands() {
       }
 
       await sendTelegramMessage(text, userId);
-}
+    } // ← вот эта закрывает if (message === "/hf")
 
 // Тест подключения к сети
 (async () => {
