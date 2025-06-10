@@ -71,6 +71,83 @@ async function calculateHealthFactor() {
 
   let totalCollateral = 0;
   let totalBorrow = 0;
+  let ethCollateralUSD = 0;
+  let ethBorrowInETH = 0;
+
+  const ethPrice = await getEthPrice();
+
+  for (const pool of pools) {
+    const cToken = new ethers.Contract(pool.address, cTokenAbi, provider);
+    const [cBal, borrow, rate] = await Promise.all([
+      cToken.balanceOf(user),
+      cToken.borrowBalanceStored(user),
+      cToken.exchangeRateStored()
+    ]);
+
+    const [, collateralFactor] = await comptroller.markets(pool.address);
+
+    // Подсчёт в underlying токенах
+    const cTokenBalance = parseFloat(ethers.utils.formatUnits(cBal, 8));
+    const exchangeRate = parseFloat(ethers.utils.formatUnits(rate, 18));
+    const suppliedTokens = cTokenBalance * exchangeRate;
+
+    const suppliedUSD = pool.name === "ETH"
+      ? suppliedTokens * ethPrice
+      : suppliedTokens;
+
+    const collateralUSD = suppliedUSD * (collateralFactor / 1e18);
+
+    let borrowTokens = parseFloat(ethers.utils.formatUnits(borrow, pool.decimals));
+    let borrowUSD = pool.name === "ETH"
+      ? borrowTokens * ethPrice
+      : borrowTokens;
+
+    totalCollateral += collateralUSD;
+    totalBorrow += borrowUSD;
+
+    if (pool.name === "ETH") {
+      ethCollateralUSD = collateralUSD;
+      ethBorrowInETH = borrowTokens;
+    }
+
+    breakdown.push(`${pool.name}: 🟢 $${collateralUSD.toFixed(2)} (${suppliedTokens.toFixed(4)} ${pool.name}) | 🔴 $${borrowUSD.toFixed(2)}`);
+  }
+
+  const hf = totalBorrow === 0 ? "∞" : (totalCollateral / totalBorrow).toFixed(4);
+  let liquidationEthPrice = null;
+
+  if (ethCollateralUSD > 0 && ethBorrowInETH > 0) {
+    const nonEthCollateral = totalCollateral - ethCollateralUSD;
+    const nonEthBorrow = totalBorrow - (ethBorrowInETH * ethPrice);
+    const criticalEthPrice = nonEthBorrow >= ethCollateralUSD
+      ? 0
+      : (ethCollateralUSD - nonEthBorrow) / ethBorrowInETH;
+    liquidationEthPrice = criticalEthPrice;
+  }
+
+  return {
+    hf,
+    collateral: totalCollateral,
+    borrow: totalBorrow,
+    breakdown,
+    liquidationEthPrice
+  };
+}
+
+  const comptrollerAddress = "0xAB1c342C7bf5Ec5F02ADEA1c2270670bCa144CbB";
+  const comptrollerAbi = ["function markets(address) view returns (bool, uint256, bool)"];
+  const cTokenAbi = [
+    "function balanceOf(address) view returns (uint)",
+    "function borrowBalanceStored(address) view returns (uint)",
+    "function exchangeRateStored() view returns (uint)"
+  ];
+
+  const comptroller = new ethers.Contract(comptrollerAddress, comptrollerAbi, provider);
+  const user = selfMonitor.address;
+  const breakdown = [];
+
+  let totalCollateral = 0;
+  let totalBorrow = 0;
   let ethCollateral = 0;
   let ethBorrowInETH = 0;
 
