@@ -184,10 +184,12 @@ async function getEthPrice() {
   try {
     const res = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd");
     return res.data.ethereum.usd;
-  } catch {
+  } catch (err) {
+    console.error("❌ Ошибка получения ETH цены:", err.message);
     return 0;
   }
 }
+
 
 async function calculateHealthFactor() {
   const comptrollerAddress = "0xAB1c342C7bf5Ec5F02ADEA1c2270670bCa144CbB";
@@ -205,6 +207,9 @@ async function calculateHealthFactor() {
   let totalCollateral = 0;
   let totalBorrow = 0;
   let ethCollateral = 0;
+  let ethBorrowAmount = 0;
+
+  const ethPrice = await getEthPrice();
 
   for (const pool of pools) {
     const cToken = new ethers.Contract(pool.address, cTokenAbi, provider);
@@ -213,31 +218,37 @@ async function calculateHealthFactor() {
       cToken.borrowBalanceStored(user),
       cToken.exchangeRateStored()
     ]);
+
     const [, factor] = await comptroller.markets(pool.address);
 
-    const c = Number(ethers.utils.formatUnits(cBal, 8));
-    const r = rate / 1e18;
-    const underlying = c * r;
-    const collateralUSD = underlying * (factor / 1e18);
-    const borrowUSD = Number(ethers.utils.formatUnits(borrow, pool.decimals));
+    const cTokenBal = parseFloat(ethers.utils.formatUnits(cBal, 8));
+    const exchangeRate = parseFloat(ethers.utils.formatUnits(rate, 18));
+    const supplied = cTokenBal * exchangeRate;
+
+    const suppliedUSD = pool.name === "ETH" ? supplied * ethPrice : supplied;
+    const collateralUSD = suppliedUSD * (factor / 1e18);
+
+    const borrowAmount = parseFloat(ethers.utils.formatUnits(borrow, pool.decimals));
+    const borrowUSD = pool.name === "ETH" ? borrowAmount * ethPrice : borrowAmount;
 
     totalCollateral += collateralUSD;
     totalBorrow += borrowUSD;
 
     if (pool.name === "ETH") {
       ethCollateral = collateralUSD;
+      ethBorrowAmount = borrowAmount;
     }
 
-    breakdown.push(`${pool.name}: 🟢 $${collateralUSD.toFixed(2)} | 🔴 $${borrowUSD.toFixed(2)}`);
+    breakdown.push(`${pool.name}: 🟢 $${collateralUSD.toFixed(2)} (${supplied.toFixed(4)} ${pool.name}) | 🔴 $${borrowUSD.toFixed(2)}`);
   }
 
-  let hf = totalBorrow === 0 ? "∞" : (totalCollateral / totalBorrow).toFixed(4);
-  let liquidationEthPrice = null;
+  const hf = totalBorrow === 0 ? "∞" : (totalCollateral / totalBorrow).toFixed(4);
 
-  const ethPrice = await getEthPrice();
-  if (ethCollateral > 0) {
-    const excess = totalCollateral - totalBorrow;
-    liquidationEthPrice = ethPrice * (1 - (excess / ethCollateral));
+  let liquidationEthPrice = null;
+  if (ethCollateral > 0 && ethBorrowAmount > 0) {
+    const nonEthCollateral = totalCollateral - ethCollateral;
+    const nonEthBorrow = totalBorrow - ethBorrowAmount * ethPrice;
+    liquidationEthPrice = (ethCollateral - nonEthBorrow) / ethBorrowAmount;
   }
 
   return {
