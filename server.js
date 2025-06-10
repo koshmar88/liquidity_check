@@ -219,11 +219,18 @@ async function handleBotCommands() {
   }
 }
 
-// Запуск циклов
+// 🔁 Запуск циклов
 setInterval(checkLiquidity, CHECK_INTERVAL_MS);
 setInterval(checkSelfHealth, CHECK_INTERVAL_MS);
 setInterval(handleBotCommands, 8000);
 
-checkLiquidity();
-checkSelfHealth();
-handleBotCommands();
+// 🚀 Немедленный запуск при старте
+;(async () => {
+  try {
+    await checkLiquidity();
+    await checkSelfHealth();
+    await handleBotCommands();
+  } catch (err) {
+    console.error("❌ Ошибка при начальном запуске:", err.message);
+  }
+})();
