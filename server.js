@@ -144,54 +144,7 @@ const selfMonitor = {
   lastStatus: "safe"
 };
 
-async function checkSelfHealth() {
-  const comptrollerAddress = "0xAB1c342C7bf5Ec5F02ADEA1c2270670bCa144CbB";
-  const comptrollerAbi = ["function getAccountLiquidity(address) view returns (uint, uint, uint)"];
-  const contract = new ethers.Contract(comptrollerAddress, comptrollerAbi, provider);
-
-  try {
-    const [error, liquidity, shortfall] = await contract.getAccountLiquidity(selfMonitor.address);
-
-    if (!error.eq(0)) {
-      console.error("❌ Ошибка получения HF:", error.toString());
-      return;
-    }
-
-    let hf = 0;
-    if (shortfall.gt(0)) {
-      hf = 0;
-    } else if (liquidity.eq(0)) {
-      hf = 1;
-    } else {
-      hf = "∞";
-    }
-
-    console.log(`🧍 Мой HF: ${hf}`);
-
-    if (hf === 0 && selfMonitor.lastStatus !== "danger") {
-      await sendTelegramMessage(`⚠️ Внимание! Твой Health Factor упал до 0.0 — ликвидация близко!`);
-      selfMonitor.lastStatus = "danger";
-    } else if (hf !== 0 && selfMonitor.lastStatus !== "safe") {
-      await sendTelegramMessage(`✅ HF восстановился: ${hf}`);
-      selfMonitor.lastStatus = "safe";
-    }
-  } catch (err) {
-    console.error("❌ Ошибка self-monitoring:", err.message);
-  }
-}
-
-async function getEthPrice() {
-  try {
-    const res = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd");
-    return res.data.ethereum.usd;
-  } catch (err) {
-    console.error("❌ Ошибка получения ETH цены:", err.message);
-    return 0;
-  }
-}
-
-
-async function calculateHealthFactor() {
+async function calculateHealthFactor(ethPrice) {
   const comptrollerAddress = "0xAB1c342C7bf5Ec5F02ADEA1c2270670bCa144CbB";
   const comptrollerAbi = ["function markets(address) view returns (bool, uint256, bool)"];
   const cTokenAbi = [
@@ -209,8 +162,6 @@ async function calculateHealthFactor() {
   let ethCollateral = 0;
   let ethBorrowAmount = 0;
 
-  const ethPrice = await getEthPrice();
-
   for (const pool of pools) {
     const cToken = new ethers.Contract(pool.address, cTokenAbi, provider);
     const [cBal, borrow, rate] = await Promise.all([
@@ -221,9 +172,8 @@ async function calculateHealthFactor() {
 
     const [, factor] = await comptroller.markets(pool.address);
 
-    const cTokenBal = parseFloat(ethers.utils.formatUnits(cBal, 8));
-    const exchangeRate = parseFloat(ethers.utils.formatUnits(rate, 18));
-    const supplied = cTokenBal * exchangeRate;
+    const suppliedUnderlying = cBal.mul(rate).div(ethers.BigNumber.from("10").pow(18));
+    const supplied = parseFloat(ethers.utils.formatUnits(suppliedUnderlying, pool.decimals));
 
     const suppliedUSD = pool.name === "ETH" ? supplied * ethPrice : supplied;
     const collateralUSD = suppliedUSD * (factor / 1e18);
@@ -249,6 +199,7 @@ async function calculateHealthFactor() {
     const nonEthCollateral = totalCollateral - ethCollateral;
     const nonEthBorrow = totalBorrow - ethBorrowAmount * ethPrice;
     liquidationEthPrice = (ethCollateral - nonEthBorrow) / ethBorrowAmount;
+    if (liquidationEthPrice < 0) liquidationEthPrice = null;
   }
 
   return {
@@ -259,6 +210,7 @@ async function calculateHealthFactor() {
     liquidationEthPrice
   };
 }
+
 
 // Тест подключения к сети
 (async () => {
