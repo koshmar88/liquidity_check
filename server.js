@@ -113,9 +113,8 @@ async function handleBotCommands() {
       await sendTelegramMessage(text, userId);
     } else if (message === "/start") {
       await sendTelegramMessage("👋 Привет! Я буду уведомлять тебя о резких изменениях ликвидности. Используй команду /status для проверки.", userId);
-    } else if (message === "/hf") {
-      const ethPrice = await getEthPrice();
-      const { hf, collateral, borrow, breakdown, liquidationEthPrice } = await calculateHealthFactor();
+        } else if (message === "/hf") {
+      const { hf, collateral, borrow, breakdown, liquidationEthPrice, ethPrice } = await calculateHealthFactor();
 
       let text = `📉 Текущий Health Factor: ${hf}\n\n`;
       text += `💼 Общий залог: $${collateral.toFixed(2)}\n💣 Общий долг: $${borrow.toFixed(2)}\n\n`;
@@ -144,13 +143,29 @@ const selfMonitor = {
   lastStatus: "safe"
 };
 
-async function calculateHealthFactor(ethPrice) {
+// ...existing code...
+
+async function getEthPrice() {
+  try {
+    const res = await axios.get(
+      "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd"
+    );
+    return res.data.ethereum.usd;
+  } catch (e) {
+    console.error("❌ Не удалось получить цену ETH:", e.message);
+    return 0;
+  }
+}
+
+async function calculateHealthFactor() {
+  const ethPrice = await getEthPrice();
+
   const comptrollerAddress = "0xAB1c342C7bf5Ec5F02ADEA1c2270670bCa144CbB";
   const comptrollerAbi = ["function markets(address) view returns (bool, uint256, bool)"];
   const cTokenAbi = [
-    "function balanceOf(address) view returns (uint)",
-    "function borrowBalanceStored(address) view returns (uint)",
-    "function exchangeRateStored() view returns (uint)"
+    "function balanceOf(address) view returns (uint256)",
+    "function borrowBalanceStored(address) view returns (uint256)",
+    "function exchangeRateStored() view returns (uint256)"
   ];
 
   const comptroller = new ethers.Contract(comptrollerAddress, comptrollerAbi, provider);
@@ -172,14 +187,26 @@ async function calculateHealthFactor(ethPrice) {
 
     const [, factor] = await comptroller.markets(pool.address);
 
-    const suppliedUnderlying = cBal.mul(rate).div(ethers.BigNumber.from("10").pow(18));
-    const supplied = parseFloat(ethers.utils.formatUnits(suppliedUnderlying, pool.decimals));
+    // cToken баланс всегда 8 знаков после запятой
+    const cTokenBal = parseFloat(ethers.utils.formatUnits(cBal, 8));
+    // exchangeRate всегда 18 знаков после запятой
+    const exchangeRate = parseFloat(ethers.utils.formatUnits(rate, 18));
+    // underlying = cToken * exchangeRate
+    const suppliedUnderlying = cTokenBal * exchangeRate;
 
-    const suppliedUSD = pool.name === "ETH" ? supplied * ethPrice : supplied;
+    // suppliedUnderlying в underlying токене (например, ETH, USDC)
+    // Для stablecoin suppliedUnderlying ≈ USD, для ETH — в ETH
+    const suppliedUSD = pool.name === "ETH"
+      ? suppliedUnderlying * ethPrice
+      : suppliedUnderlying;
+
     const collateralUSD = suppliedUSD * (factor / 1e18);
 
+    // borrow всегда в underlying токене
     const borrowAmount = parseFloat(ethers.utils.formatUnits(borrow, pool.decimals));
-    const borrowUSD = pool.name === "ETH" ? borrowAmount * ethPrice : borrowAmount;
+    const borrowUSD = pool.name === "ETH"
+      ? borrowAmount * ethPrice
+      : borrowAmount;
 
     totalCollateral += collateralUSD;
     totalBorrow += borrowUSD;
@@ -189,7 +216,9 @@ async function calculateHealthFactor(ethPrice) {
       ethBorrowAmount = borrowAmount;
     }
 
-    breakdown.push(`${pool.name}: 🟢 $${collateralUSD.toFixed(2)} (${supplied.toFixed(4)} ${pool.name}) | 🔴 $${borrowUSD.toFixed(2)}`);
+    breakdown.push(
+      `${pool.name}: 🟢 $${collateralUSD.toFixed(2)} (${suppliedUnderlying.toFixed(4)} ${pool.name}) | 🔴 $${borrowUSD.toFixed(2)}`
+    );
   }
 
   const hf = totalBorrow === 0 ? "∞" : (totalCollateral / totalBorrow).toFixed(4);
@@ -207,10 +236,10 @@ async function calculateHealthFactor(ethPrice) {
     collateral: totalCollateral,
     borrow: totalBorrow,
     breakdown,
-    liquidationEthPrice
+    liquidationEthPrice,
+    ethPrice
   };
 }
-
 
 // Тест подключения к сети
 (async () => {
