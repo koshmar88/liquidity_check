@@ -22,12 +22,12 @@ if (ACTIVE_CHAT_ID) {
 } else {
   console.log("⚠️ chat_id не найден, бот пока не знает, кому слать уведомления.");
 }
+
 const pools = [
   { name: "USDT", address: "0x48759F220ED983dB51fA7A8C0D2AAb8f3ce4166a", decimals: 6 },
   { name: "USDC", address: "0x76Eb2FE28b36B3ee97F3Adae0C69606eeDB2A37c", decimals: 6 },
-  { name: "DAI",  address: "0x8e595470Ed749b85C6F7669de83EAe304C2ec68F", decimals: 18 },
+  { name: "DAI", address: "0x8e595470Ed749b85C6F7669de83EAe304C2ec68F", decimals: 18 },
   { name: "ETH", address: "0x41c84c0e2EE0b740Cf0d31F63f3B6F627DC6b393", decimals: 18 }
-
 ];
 
 const lastCashValues = {};
@@ -93,7 +93,6 @@ async function handleBotCommands() {
 
     if (!message || !userId) return;
 
-    // Не отвечать повторно
     await axios.get(`https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=${lastUpdate.update_id + 1}`);
 
     if (!ACTIVE_CHAT_ID) {
@@ -114,7 +113,7 @@ async function handleBotCommands() {
       await sendTelegramMessage(text, userId);
     } else if (message === "/start") {
       await sendTelegramMessage("👋 Привет! Я буду уведомлять тебя о резких изменениях ликвидности. Используй команду /status для проверки.", userId);
-     } else if (message === "/hf") {
+    } else if (message === "/hf") {
       const ethPrice = await getEthPrice();
       const { hf, collateral, borrow, breakdown, liquidationEthPrice } = await calculateHealthFactor();
 
@@ -134,31 +133,20 @@ async function handleBotCommands() {
       }
 
       await sendTelegramMessage(text, userId);
-    } // ← вот эта закрывает if (message === "/hf")
-      } catch (err) {
+    }
+  } catch (err) {
     console.error("❌ Ошибка при обработке команд:", err.response?.data || err.message);
   }
-} // ← вот эта закрывает всю функцию handleBotCommands
+}
 
-
-// Тест подключения к сети
-(async () => {
-  try {
-    const block = await provider.getBlockNumber();
-    console.log("✅ Сеть работает, текущий блок:", block);
-  } catch (e) {
-    console.error("❌ Ошибка подключения к сети:", e.message);
-  }
-})();
 const selfMonitor = {
   address: "0x2a4cE5BaCcB98E5F95D37F8B3D1065754E0389CD",
   lastStatus: "safe"
 };
+
 async function checkSelfHealth() {
   const comptrollerAddress = "0xAB1c342C7bf5Ec5F02ADEA1c2270670bCa144CbB";
-  const comptrollerAbi = [
-    "function getAccountLiquidity(address) view returns (uint, uint, uint)"
-  ];
+  const comptrollerAbi = ["function getAccountLiquidity(address) view returns (uint, uint, uint)"];
   const contract = new ethers.Contract(comptrollerAddress, comptrollerAbi, provider);
 
   try {
@@ -191,6 +179,7 @@ async function checkSelfHealth() {
     console.error("❌ Ошибка self-monitoring:", err.message);
   }
 }
+
 async function getEthPrice() {
   try {
     const res = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd");
@@ -199,6 +188,7 @@ async function getEthPrice() {
     return 0;
   }
 }
+
 async function calculateHealthFactor() {
   const comptrollerAddress = "0xAB1c342C7bf5Ec5F02ADEA1c2270670bCa144CbB";
   const comptrollerAbi = ["function markets(address) view returns (bool, uint256, bool)"];
@@ -215,7 +205,6 @@ async function calculateHealthFactor() {
   let totalCollateral = 0;
   let totalBorrow = 0;
   let ethCollateral = 0;
-  let ethDebt = 0;
 
   for (const pool of pools) {
     const cToken = new ethers.Contract(pool.address, cTokenAbi, provider);
@@ -237,7 +226,6 @@ async function calculateHealthFactor() {
 
     if (pool.name === "ETH") {
       ethCollateral = collateralUSD;
-      ethDebt = borrowUSD;
     }
 
     breakdown.push(`${pool.name}: 🟢 $${collateralUSD.toFixed(2)} | 🔴 $${borrowUSD.toFixed(2)}`);
@@ -261,6 +249,15 @@ async function calculateHealthFactor() {
   };
 }
 
+// Тест подключения к сети
+(async () => {
+  try {
+    const block = await provider.getBlockNumber();
+    console.log("✅ Сеть работает, текущий блок:", block);
+  } catch (e) {
+    console.error("❌ Ошибка подключения к сети:", e.message);
+  }
+})();
 
 // Запуск циклов
 setInterval(checkLiquidity, CHECK_INTERVAL_MS);
