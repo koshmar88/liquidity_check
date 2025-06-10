@@ -1,6 +1,5 @@
 const ethers = require("ethers");
 const axios = require("axios");
-const fs = require("fs");
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const RPC_URL = process.env.RPC_URL;
@@ -73,7 +72,7 @@ async function calculateHealthFactor() {
   let totalCollateral = 0;
   let totalBorrow = 0;
   let ethCollateral = 0;
-  let ethDebt = 0;
+  let ethBorrowInETH = 0;
 
   const ethPrice = await getEthPrice();
 
@@ -92,21 +91,28 @@ async function calculateHealthFactor() {
     const collateralUSD = underlying * (factor / 1e18);
     let borrowUSD = Number(ethers.utils.formatUnits(borrow, pool.decimals));
 
-    if (pool.name === "ETH") borrowUSD *= ethPrice;
+    if (pool.name === "ETH") {
+      ethCollateral = collateralUSD;
+      ethBorrowInETH = parseFloat(ethers.utils.formatUnits(borrow, pool.decimals));
+      borrowUSD *= ethPrice;
+    }
 
     totalCollateral += collateralUSD;
     totalBorrow += borrowUSD;
-
-    if (pool.name === "ETH") ethCollateral = collateralUSD;
 
     breakdown.push(`${pool.name}: 🟢 $${collateralUSD.toFixed(2)} | 🔴 $${borrowUSD.toFixed(2)}`);
   }
 
   const hf = totalBorrow === 0 ? "∞" : (totalCollateral / totalBorrow).toFixed(4);
   let liquidationEthPrice = null;
-  if (ethCollateral > 0) {
-    const excess = totalCollateral - totalBorrow;
-    liquidationEthPrice = ethPrice * (1 - (excess / ethCollateral));
+
+  if (ethCollateral > 0 && ethBorrowInETH > 0) {
+    const nonEthCollateral = totalCollateral - ethCollateral;
+    const nonEthBorrow = totalBorrow - (ethBorrowInETH * ethPrice);
+    const criticalEthPrice = nonEthBorrow >= ethCollateral
+      ? 0
+      : (ethCollateral - nonEthBorrow) / ethBorrowInETH;
+    liquidationEthPrice = criticalEthPrice;
   }
 
   return {
@@ -139,6 +145,30 @@ async function checkSelfHealth() {
     }
   } catch (err) {
     console.error("❌ Ошибка self-monitoring:", err.message);
+  }
+}
+
+async function checkLiquidity() {
+  console.log("🔍 Проверка ликвидности...");
+
+  for (const pool of pools) {
+    try {
+      const currentCash = await getCash(pool);
+      const prev = lastCashValues[pool.name];
+
+      if (prev !== undefined) {
+        const diff = currentCash - prev;
+        if (Math.abs(diff) >= THRESHOLD_USD) {
+          const direction = diff > 0 ? "добавлена" : "изъята";
+          const message = `💧 В пуле ${pool.name} ${direction} ликвидность: ${diff.toFixed(2)} USD`;
+          await sendTelegramMessage(message);
+        }
+      }
+
+      lastCashValues[pool.name] = currentCash;
+    } catch (err) {
+      console.error(`⚠️ Ошибка обработки пула ${pool.name}:`, err.message);
+    }
   }
 }
 
@@ -175,7 +205,12 @@ async function handleBotCommands() {
       text += `💼 Общий залог: $${collateral.toFixed(2)}\n💣 Общий долг: $${borrow.toFixed(2)}\n\n`;
       for (const line of breakdown) text += `• ${line}\n`;
       text += `\n📈 Цена ETH: $${ethPrice.toFixed(2)}\n`;
-      text += `⚠️ Ликвидация наступит при цене ETH ≈ $${liquidationEthPrice?.toFixed(2) || "н/д"}`;
+
+      if (liquidationEthPrice) {
+        text += `⚠️ Ликвидация при цене ETH ≈ $${liquidationEthPrice.toFixed(2)}`;
+      } else {
+        text += `✅ До ликвидации далеко`;
+      }
 
       await sendTelegramMessage(text, userId);
     }
@@ -184,6 +219,7 @@ async function handleBotCommands() {
   }
 }
 
+// Запуск циклов
 setInterval(checkLiquidity, CHECK_INTERVAL_MS);
 setInterval(checkSelfHealth, CHECK_INTERVAL_MS);
 setInterval(handleBotCommands, 8000);
