@@ -115,38 +115,26 @@ async function handleBotCommands() {
     } else if (message === "/start") {
       await sendTelegramMessage("👋 Привет! Я буду уведомлять тебя о резких изменениях ликвидности. Используй команду /status для проверки.", userId);
     } else if (message === "/hf") {
-      try {
-        const comptrollerAddress = "0xAB1c342C7bf5Ec5F02ADEA1c2270670bCa144CbB";
-        const comptrollerAbi = [
-          "function getAccountLiquidity(address) view returns (uint, uint, uint)"
-        ];
-        const contract = new ethers.Contract(comptrollerAddress, comptrollerAbi, provider);
-        const [error, liquidity, shortfall] = await contract.getAccountLiquidity(selfMonitor.address);
+      const ethPrice = await getEthPrice();
+      const { hf, collateral, borrow, breakdown, liquidationEthPrice } = await calculateHealthFactor();
 
-        if (!error.eq(0)) {
-          await sendTelegramMessage(`❌ Ошибка получения HF: ${error.toString()}`, userId);
-          return;
-        }
+      let text = `📉 Текущий Health Factor: ${hf}\n\n`;
+      text += `💼 Общий залог: $${collateral.toFixed(2)}\n💣 Общий долг: $${borrow.toFixed(2)}\n\n`;
 
-        let hf = 0;
-        if (shortfall.gt(0)) {
-          hf = "0.0";
-        } else if (liquidity.eq(0)) {
-          hf = "1.0";
-        } else {
-          hf = "∞";
-        }
-
-        await sendTelegramMessage(`🩺 Твой Health Factor: ${hf}`, userId);
-      } catch (err) {
-        await sendTelegramMessage(`❌ Ошибка при расчете HF: ${err.message}`, userId);
+      for (const line of breakdown) {
+        text += `• ${line}\n`;
       }
-    }
-  } catch (err) {
-    console.error("❌ Ошибка при обработке команд:", err.response?.data || err.message);
-  }
-}
 
+      text += `\n📈 Цена ETH: $${ethPrice.toFixed(2)}\n`;
+
+      if (liquidationEthPrice) {
+        text += `⚠️ Ликвидация при цене ETH ≈ $${liquidationEthPrice.toFixed(2)}`;
+      } else {
+        text += `✅ До ликвидации далеко`;
+      }
+
+      await sendTelegramMessage(text, userId);
+}
 
 // Тест подключения к сети
 (async () => {
@@ -197,6 +185,75 @@ async function checkSelfHealth() {
   } catch (err) {
     console.error("❌ Ошибка self-monitoring:", err.message);
   }
+}
+async function getEthPrice() {
+  try {
+    const res = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd");
+    return res.data.ethereum.usd;
+  } catch {
+    return 0;
+  }
+}
+async function calculateHealthFactor() {
+  const comptrollerAddress = "0xAB1c342C7bf5Ec5F02ADEA1c2270670bCa144CbB";
+  const comptrollerAbi = ["function markets(address) view returns (bool, uint256, bool)"];
+  const cTokenAbi = [
+    "function balanceOf(address) view returns (uint)",
+    "function borrowBalanceStored(address) view returns (uint)",
+    "function exchangeRateStored() view returns (uint)"
+  ];
+
+  const comptroller = new ethers.Contract(comptrollerAddress, comptrollerAbi, provider);
+  const user = selfMonitor.address;
+  const breakdown = [];
+
+  let totalCollateral = 0;
+  let totalBorrow = 0;
+  let ethCollateral = 0;
+  let ethDebt = 0;
+
+  for (const pool of pools) {
+    const cToken = new ethers.Contract(pool.address, cTokenAbi, provider);
+    const [cBal, borrow, rate] = await Promise.all([
+      cToken.balanceOf(user),
+      cToken.borrowBalanceStored(user),
+      cToken.exchangeRateStored()
+    ]);
+    const [, factor] = await comptroller.markets(pool.address);
+
+    const c = Number(ethers.utils.formatUnits(cBal, 8));
+    const r = rate / 1e18;
+    const underlying = c * r;
+    const collateralUSD = underlying * (factor / 1e18);
+    const borrowUSD = Number(ethers.utils.formatUnits(borrow, pool.decimals));
+
+    totalCollateral += collateralUSD;
+    totalBorrow += borrowUSD;
+
+    if (pool.name === "ETH") {
+      ethCollateral = collateralUSD;
+      ethDebt = borrowUSD;
+    }
+
+    breakdown.push(`${pool.name}: 🟢 $${collateralUSD.toFixed(2)} | 🔴 $${borrowUSD.toFixed(2)}`);
+  }
+
+  let hf = totalBorrow === 0 ? "∞" : (totalCollateral / totalBorrow).toFixed(4);
+  let liquidationEthPrice = null;
+
+  const ethPrice = await getEthPrice();
+  if (ethCollateral > 0) {
+    const excess = totalCollateral - totalBorrow;
+    liquidationEthPrice = ethPrice * (1 - (excess / ethCollateral));
+  }
+
+  return {
+    hf,
+    collateral: totalCollateral,
+    borrow: totalBorrow,
+    breakdown,
+    liquidationEthPrice
+  };
 }
 
 
