@@ -141,9 +141,11 @@ async function handleBotCommands() {
 const selfMonitor = {
   address: "0x2a4cE5BaCcB98E5F95D37F8B3D1065754E0389CD",
   lastStatus: "safe"
-};
-
-// ...existing code...
+}
+ } catch (err) {
+    console.error("❌ Ошибка в handleBotCommands:", err);
+  }
+}
 
 async function getEthPrice() {
   try {
@@ -258,4 +260,6 @@ setInterval(checkSelfHealth, CHECK_INTERVAL_MS);
 
 checkLiquidity();
 handleBotCommands();
-checkSelfHealth();
+function checkSelfHealth() {
+  // Пока функция не реализована, чтобы не было ошибки
+}
