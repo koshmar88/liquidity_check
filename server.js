@@ -41,20 +41,25 @@ const ironBankPools = [
 
 // Пример для Compound (замените адреса на актуальные для вашей сети)
 const compoundPools = [
-  { name: "USDT",   address: "0xf650C3d88Cc8617A7bD0D2eEDe386dC8110dF8aA", decimals: 8, underlyingDecimals: 6 }, // cUSDT
-  { name: "USDC",   address: "0x39AA39c021dfbaE8faC545936693aC917d5E7563", decimals: 8, underlyingDecimals: 6 }, // cUSDC
-  { name: "DAI",    address: "0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643", decimals: 8, underlyingDecimals: 18 }, // cDAI
+  { name: "USDT",   address: "0xf650c3d88d12db855b8bf7d11be6c55a4e07dcc9", decimals: 8, underlyingDecimals: 6 }, // cUSDT
   { name: "ETH",    address: "0x4Dd26482738bE6C06C31467a19dcdA9AD781e8C4", decimals: 8, underlyingDecimals: 18 }, // cETH (WETH market)
   { name: "wstETH", address: "0x041171993284df560249B57358F931D9eB7b925D", decimals: 8, underlyingDecimals: 18 }, // cWSTETH
   { name: "WBTC",   address: "0xccF4429DB6322D5C611ee964527D42E5d685DD6a", decimals: 8, underlyingDecimals: 8 }   // cWBTC
 ];
 
-// Пример для Aave v2 (замените адреса на актуальные aToken и debtToken)
 const aavePools = [
-  { name: "USDT", aToken: "0x3Ed3B47Dd13EC9a98b44e6204A523E766B225811", variableDebtToken: "0x619beb58998eD2278e08620f97007e1116D5D25b", decimals: 6 },
-  { name: "USDC", aToken: "0xBcca60bB61934080951369a648Fb03DF4F96263C", variableDebtToken: "0x619beb58998eD2278e08620f97007e1116D5D25b", decimals: 6 },
-  { name: "DAI",  aToken: "0x028171bCA77440897B824Ca71D1c56E803B653a9", variableDebtToken: "0x6C3e4cb2E96B01F4b866965A91ed4437839A121a", decimals: 18 },
-  { name: "ETH",  aToken: "0x3a3A65aAb0dd2A17E3F1947bA16138cd37d08c04", variableDebtToken: "0xF63B34710400CAd3e044cFfDcAb00a0f32E33eCf", decimals: 18 }
+  {
+    name: "USDT",
+    aToken: "0x3Ed3B47Dd13EC9a98b44e6204A523E766B225811",
+    variableDebtToken: "0x619beb58998eD2278e08620f97007e1116D5D25b",
+    decimals: 6
+  },
+  {
+    name: "ETH",
+    aToken: "0x3a3A65aAb0dd2A17E3F1947bA16138cd37d08c04",
+    variableDebtToken: "0xF63B34710400CAd3e044cFfDcAb00a0f32E33eCf", // проверьте по getReserveTokensAddresses
+    decimals: 18
+  }
 ];
 
 const lastCashValues = {};
