@@ -44,7 +44,9 @@ const compoundPools = [
   { name: "USDT", address: "0xf650C3d88Cc8617A7bD0D0d6fA41a6C7eCfC3bC1", decimals: 8, underlyingDecimals: 6 },
   { name: "USDC", address: "0x39AA39c021dfbaE8faC545936693aC917d5E7563", decimals: 8, underlyingDecimals: 6 },
   { name: "DAI", address: "0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643", decimals: 8, underlyingDecimals: 18 },
-  { name: "ETH", address: "0x4Dd26482738bE6C06C31467a19dcdA9AD781e8C4", decimals: 8, underlyingDecimals: 18 }
+  { name: "ETH", address: "0x4Dd26482738bE6C06C31467a19dcdA9AD781e8C4", decimals: 8, underlyingDecimals: 18 },
+  { name: "wstETH", address: "0x041171993284df560249B57358F931D9eB7b925D", decimals: 8, underlyingDecimals: 18 },
+  { name: "WBTC", address: "0x2263B9A0fD6A2633A2F6a5cAaA0dA3aE3C5A6cA5", decimals: 8, underlyingDecimals: 8 }
 ];
 
 // Пример для Aave v2 (замените адреса на актуальные aToken и debtToken)
@@ -258,7 +260,16 @@ async function calculateHealthFactor() {
     if (pool.name === "ETH") {
       suppliedUSD = supplied * ethPrice;
       borrowedUSD = borrowed * ethPrice;
-      ethBorrow = borrowed;
+    }
+    if (pool.name === "WBTC") {
+      if (!wbtcPrice) wbtcPrice = await getWbtcPrice();
+      suppliedUSD = supplied * wbtcPrice;
+      borrowedUSD = borrowed * wbtcPrice;
+    }
+    if (pool.name === "wstETH") {
+      if (!wstethPrice) wstethPrice = await getWstethPrice();
+      suppliedUSD = supplied * wstethPrice;
+      borrowedUSD = borrowed * wstethPrice;
     }
 
     // Считаем supply для всех активов с collateral factor
@@ -295,4 +306,15 @@ async function calculateHealthFactor() {
     liquidationEthPrice,
     ethPrice
   };
+}
+
+async function getWbtcPrice() {
+  const { data } = await axios.get("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT");
+  return parseFloat(data.price);
+}
+
+async function getWstethPrice() {
+  // Можно взять с CoinGecko или другого источника
+  const { data } = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=staked-ether&vs_currencies=usd");
+  return data["staked-ether"].usd;
 }
