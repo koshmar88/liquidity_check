@@ -39,14 +39,6 @@ const ironBankPools = [
   { name: "ETH",  address: "0x41c84c0e2EE0b740Cf0d31F63f3B6F627DC6b393", decimals: 18 }
 ];
 
-// Пример для Compound (замените адреса на актуальные для вашей сети)
-const compoundPools = [
-  { name: "USDT",   address: "0xf650c3d88d12db855b8bf7d11be6c55a4e07dcc9", decimals: 8, underlyingDecimals: 6 }, // cUSDT
-  { name: "ETH",    address: "0x4ddc2d193948926d02f9b1fe9e1daa0718270ed5", decimals: 8, underlyingDecimals: 18 }, // cETH (WETH market)
-  { name: "wstETH", address: "0x041171993284df560249B57358F931D9eB7b925D", decimals: 8, underlyingDecimals: 18 }, // cWSTETH
-  { name: "WBTC",   address: "0xccF4429DB6322D5C611ee964527D42E5d685DD6a", decimals: 8, underlyingDecimals: 8 }   // cWBTC
-];
-
 const aavePools = [
   {
     name: "USDT",
@@ -312,7 +304,7 @@ const Web3 = require('web3');
 const web3 = new Web3('https://eth-mainnet.g.alchemy.com/v2/7QH7n3H4DakNuBQsKL8IcLRHDTGzG_oJ');
 
 // Адрес контракта Compound v3 Comet для USDT
-const cometAddress = "0xc3d688B66703497DAA19211EEdff47f25384cdc3"; // Это для USDT, замени на нужный адрес для других активов
+const cometAddress = "0xA17581A9E3356d9A858b789D68B4d866e593aE94"; // Это для USDT, замени на нужный адрес для других активов
 
 // ABI для работы с контракта Compound v3
 const cometAbi = [
