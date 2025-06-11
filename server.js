@@ -228,6 +228,10 @@ async function calculateHealthFactor() {
     breakdown.push(
       `${pool.name}: 🟢 $${collateralUSD.toFixed(2)} (${suppliedUnderlyingFloat.toFixed(4)} ${pool.name}) | 🔴 $${borrowUSD.toFixed(2)}`
     );
+
+    console.log(
+      `[${pool.name}] cTokenBal: ${cTokenBal.toString()}, exchangeRate: ${exchangeRate.toString()}, suppliedUnderlying: ${suppliedUnderlyingFloat}, borrowAmount: ${borrowAmount}, suppliedUSD: ${suppliedUSD}, collateralUSD: ${collateralUSD}, borrowUSD: ${borrowUSD}`
+    );
   }
 
   const hf = totalBorrow === 0 ? "∞" : (totalCollateral / totalBorrow).toFixed(4);
