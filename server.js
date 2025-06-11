@@ -238,7 +238,6 @@ async function calculateHealthFactor() {
       cToken.balanceOf(userAddress),
       cToken.borrowBalanceStored(userAddress),
       cToken.exchangeRateStored(),
-      cToken.decimals(),
       getCollateralFactor(pool.address)
     ]);
 
@@ -339,7 +338,6 @@ async function calculateIronBank() {
       cToken.balanceOf(userAddress),
       cToken.borrowBalanceStored(userAddress),
       cToken.exchangeRateStored(),
-      cToken.decimals(),
       getCollateralFactor(pool.address)
     ]);
     let exchangeRateScale = 18;
