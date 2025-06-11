@@ -42,7 +42,7 @@ const ironBankPools = [
 // Пример для Compound (замените адреса на актуальные для вашей сети)
 const compoundPools = [
   { name: "USDT",   address: "0xf650c3d88d12db855b8bf7d11be6c55a4e07dcc9", decimals: 8, underlyingDecimals: 6 }, // cUSDT
-  { name: "ETH",    address: "0x4Dd26482738bE6C06C31467a19dcdA9AD781e8C4", decimals: 8, underlyingDecimals: 18 }, // cETH (WETH market)
+  { name: "ETH",    address: "0x4ddc2d193948926d02f9b1fe9e1daa0718270ed5", decimals: 8, underlyingDecimals: 18 }, // cETH (WETH market)
   { name: "wstETH", address: "0x041171993284df560249B57358F931D9eB7b925D", decimals: 8, underlyingDecimals: 18 }, // cWSTETH
   { name: "WBTC",   address: "0xccF4429DB6322D5C611ee964527D42E5d685DD6a", decimals: 8, underlyingDecimals: 8 }   // cWBTC
 ];
