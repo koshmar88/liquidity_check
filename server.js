@@ -477,7 +477,7 @@ const ethAddress    = "0x0000000000000000000000000000000000000000";
 async function calculateCompoundV3AllCollaterals(address) {
   try {
     // Получаем общий borrow (USDT)
-    const borrowBalance = await comet.methods.borrowBalanceOf(address).call();
+    const borrowBalance = await comet.borrowBalanceOf(address);
     console.log("borrowBalance (raw):", borrowBalance);
 
     // Массив активов
@@ -492,15 +492,16 @@ async function calculateCompoundV3AllCollaterals(address) {
 
     for (const asset of assets) {
       try {
-        const collateralBalance = await comet.methods.collateralBalanceOf(address, asset.address).call();
+        const collateralBalance = await comet.collateralBalanceOf(address, asset.address);
+
         console.log(`collateralBalance (${asset.name}):`, collateralBalance);
 
         if (collateralBalance === "0") continue;
 
-        const assetInfo = await comet.methods.getAssetInfoByAddress(asset.address).call();
+        const assetInfo = await comet.getAssetInfoByAddress(asset.address);
         const collateralFactor = assetInfo.collateralFactor || assetInfo[2];
         const scale = assetInfo.scale || assetInfo[1];
-        const assetPrice = await comet.methods.getPrice(asset.address).call();
+        const assetPrice = await comet.getPrice(asset.address);
 
         // Логируем параметры актива
         console.log({
