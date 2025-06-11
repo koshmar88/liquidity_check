@@ -299,14 +299,8 @@ async function calculateIronBank() {
     ethPrice
   };
 }
-// Аналогично для Compound:
-const { ethers } = require("ethers");
 
 // Подключение провайдера
-const { ethers } = require("ethers");
-
-const provider = new ethers.providers.JsonRpcProvider("https://eth-mainnet.g.alchemy.com/v2/7QH7n3H4DakNuBQsKL8IcLRHDTGzG_oJ");
-
 const cometAddress = "0xA17581A9E3356d9A858b789D68B4d866e593aE94"; // Compound v3 USDT Comet
 
 const cometAbi = [
@@ -375,8 +369,6 @@ async function calculateCompoundV3(userAddress) {
   }
 }
 
-// 👉 Замените на ваш адрес
-calculateCompoundV3("0x2a4cE5BaCcB98E5F95D37F8B3D1065754E0389CD");
 
 
 // Аналогично для Aave:
