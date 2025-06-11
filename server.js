@@ -458,17 +458,48 @@ async function calculateCompound() {
 }
 
 // Для Aave используйте аналогичную структуру (свою функцию расчёта supply/borrow/collateralFactor)
-
 async function calculateAave() {
-  // ...реализация аналогична, используйте aavePools и их токены...
-  // Верните объект с breakdown, hf, collateral, borrow, portfolio, protocol: "Aave"
+  let totalCollateralUSD = 0;
+  let totalBorrowUSD = 0;
+  let totalSuppliedUSD = 0;
+  let ethPrice = await getEthPrice();
+  let breakdown = [];
+
+  for (const pool of aavePools) {
+    const { supplied, borrowed } = await getAavePosition(pool);
+    let suppliedUSD = supplied;
+    let borrowedUSD = 0;
+
+    if (pool.name === "ETH") {
+      suppliedUSD = supplied * ethPrice;
+      // borrowedUSD = 0; // не учитываем borrow
+    } else if (pool.name === "USDT") {
+      borrowedUSD = borrowed; // только для USDT
+    }
+
+    if (suppliedUSD > 0) {
+      totalSuppliedUSD += suppliedUSD;
+      // В Aave CF обычно 0.8 для USDT/ETH, если нужно — получите из протокола
+      const collateralFactor = pool.name === "USDT" ? 0.8 : 0.8;
+      totalCollateralUSD += suppliedUSD * collateralFactor;
+      breakdown.push(`${pool.name}: 🟢 $${suppliedUSD.toFixed(2)} (${supplied.toFixed(4)} ${pool.name}) × CF ${collateralFactor}`);
+    }
+    if (borrowedUSD > 0) {
+      totalBorrowUSD += borrowedUSD;
+      breakdown.push(`${pool.name}: 🔴 $${borrowedUSD.toFixed(2)} (${borrowed.toFixed(4)} ${pool.name})`);
+    }
+  }
+
+  let hf = totalBorrowUSD > 0 ? totalCollateralUSD / totalBorrowUSD : 0;
+  let portfolio = totalSuppliedUSD - totalBorrowUSD;
+
   return {
     protocol: "Aave",
-    hf: "1.00",
-    collateral: 0,
-    borrow: 0,
-    portfolio: 0,
-    breakdown: []
+    hf: hf.toFixed(4),
+    collateral: totalCollateralUSD,
+    borrow: totalBorrowUSD,
+    portfolio,
+    breakdown
   };
 }
 
@@ -478,4 +509,48 @@ async function calculateAllHealthFactors() {
   const compound = await calculateCompound();
   const aave = await calculateAave();
   return [iron, compound, aave];
+}
+
+// Для Compound
+async function getCompoundPosition(pool) {
+  const cToken = new ethers.Contract(pool.address, cTokenAbi, provider);
+  let supplied = 0, borrowed = 0;
+  try {
+    const [cBal, borrow, exchangeRate] = await Promise.all([
+      cToken.balanceOf(userAddress),
+      cToken.borrowBalanceStored(userAddress),
+      cToken.exchangeRateStored()
+    ]);
+    const suppliedUnderlying = cBal.mul(exchangeRate).div(ethers.BigNumber.from(10).pow(18 + 8 - pool.underlyingDecimals));
+    supplied = parseFloat(ethers.utils.formatUnits(suppliedUnderlying, pool.underlyingDecimals));
+    borrowed = parseFloat(ethers.utils.formatUnits(borrow, pool.underlyingDecimals));
+  } catch (e) {
+    // Если borrowBalanceStored revert — просто оставляем borrowed = 0
+    console.warn(`⚠️ Не удалось получить borrow для ${pool.name}:`, e.message);
+  }
+  return { supplied, borrowed };
+}
+
+// Для Aave
+async function getAavePosition(pool) {
+  const erc20Abi = [
+    "function balanceOf(address) view returns (uint256)"
+  ];
+  const aToken = new ethers.Contract(pool.aToken, erc20Abi, provider);
+  let supplied = 0, borrowed = 0;
+  try {
+    const suppliedRaw = await aToken.balanceOf(userAddress);
+    supplied = parseFloat(ethers.utils.formatUnits(suppliedRaw, pool.decimals));
+  } catch (e) {
+    console.warn(`⚠️ Не удалось получить supply для ${pool.name}:`, e.message);
+  }
+  try {
+    const debtToken = new ethers.Contract(pool.variableDebtToken, erc20Abi, provider);
+    const borrowedRaw = await debtToken.balanceOf(userAddress);
+    borrowed = parseFloat(ethers.utils.formatUnits(borrowedRaw, pool.decimals));
+  } catch (e) {
+    // Если variableDebtToken не существует — просто оставляем borrowed = 0
+    console.warn(`⚠️ Не удалось получить borrow для ${pool.name}:`, e.message);
+  }
+  return { supplied, borrowed };
 }
