@@ -1,7 +1,7 @@
 const ethers = require("ethers");
 const axios = require("axios");
 const fs = require("fs");
-
+/
 const selfMonitor = {
   address: "0x2a4cE5BaCcB98E5F95D37F8B3D1065754E0389CD",
   lastStatus: "safe"
@@ -192,18 +192,22 @@ async function calculateHealthFactor() {
 
     const [, factor] = await comptroller.markets(pool.address);
 
-    // cToken баланс всегда 8 знаков после запятой
-    const cTokenBal = parseFloat(ethers.utils.formatUnits(cBal, 8));
-    // exchangeRate всегда 18 знаков после запятой
-    const exchangeRate = parseFloat(ethers.utils.formatUnits(rate, 18));
-    // underlying = cToken * exchangeRate
-    const suppliedUnderlying = cTokenBal * exchangeRate;
+    // Приводим к числам
+    const cTokenBal = cBal; // raw BigNumber
+    const exchangeRate = rate; // raw BigNumber
+
+    // suppliedUnderlying = (cTokenBal * exchangeRate) / 10^(18 + 8 - pool.decimals)
+    const suppliedUnderlying = cTokenBal
+      .mul(exchangeRate)
+      .div(ethers.BigNumber.from(10).pow(18 + 8 - pool.decimals));
+
+    // Переводим в float для отображения
+    const suppliedUnderlyingFloat = parseFloat(ethers.utils.formatUnits(suppliedUnderlying, pool.decimals));
 
     // suppliedUnderlying в underlying токене (например, ETH, USDC)
-    // Для stablecoin suppliedUnderlying ≈ USD, для ETH — в ETH
     const suppliedUSD = pool.name === "ETH"
-      ? suppliedUnderlying * ethPrice
-      : suppliedUnderlying;
+      ? suppliedUnderlyingFloat * ethPrice
+      : suppliedUnderlyingFloat;
 
     const collateralUSD = suppliedUSD * (factor / 1e18);
 
@@ -222,7 +226,7 @@ async function calculateHealthFactor() {
     }
 
     breakdown.push(
-      `${pool.name}: 🟢 $${collateralUSD.toFixed(2)} (${suppliedUnderlying.toFixed(4)} ${pool.name}) | 🔴 $${borrowUSD.toFixed(2)}`
+      `${pool.name}: 🟢 $${collateralUSD.toFixed(2)} (${suppliedUnderlyingFloat.toFixed(4)} ${pool.name}) | 🔴 $${borrowUSD.toFixed(2)}`
     );
   }
 
