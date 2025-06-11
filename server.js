@@ -119,7 +119,8 @@ app.post("/webhook", async (req, res) => {
       const { hf, collateral, borrow, breakdown, liquidationEthPrice, ethPrice } = await calculateHealthFactor();
 
       let text = `📉 Текущий Health Factor: ${hf}\n\n`;
-      text += `💼 Общий залог: $${collateral.toFixed(2)}\n💣 Общий долг: $${borrow.toFixed(2)}\n\n`;
+      text += `💼 Общий залог: $${collateral.toFixed(2)}\n💣 Общий долг: $${borrow.toFixed(2)}\n`;
+      text += `💰 Портфель: $${portfolio.toFixed(2)}\n\n`;
 
       for (const line of breakdown) {
         text += `• ${line}\n`;
@@ -259,10 +260,14 @@ async function calculateHealthFactor() {
     liquidationEthPrice = totalCollateralUSD / ethBorrow;
   }
 
+  // Новый расчёт портфеля
+  let portfolio = totalCollateralUSD - totalBorrowUSD;
+
   return {
     hf: hf.toFixed(4),
     collateral: totalCollateralUSD,
     borrow: totalBorrowUSD,
+    portfolio, // добавили сюда
     breakdown,
     liquidationEthPrice,
     ethPrice
