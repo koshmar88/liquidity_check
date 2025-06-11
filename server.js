@@ -202,19 +202,29 @@ async function calculateHealthFactor() {
   for (const pool of pools) {
     const cToken = new ethers.Contract(pool.address, cTokenAbi, provider);
 
-    // Получаем баланс cToken и borrow
-    const [cBal, borrow, exchangeRate] = await Promise.all([
+    const [cBal, borrow, exchangeRate, cTokenDecimals] = await Promise.all([
       cToken.balanceOf(userAddress),
       cToken.borrowBalanceStored(userAddress),
-      cToken.exchangeRateStored()
+      cToken.exchangeRateStored(),
+      cToken.decimals()
     ]);
 
-    // suppliedUnderlying = (cTokenBal * exchangeRate) / 10^(18 + 8 - pool.decimals)
+    // Определяем scale для exchangeRate (18 или 8)
+    // Обычно: Compound — 18, Iron Bank — 8
+    let exchangeRateScale = 18;
+    if (exchangeRate.lt(ethers.BigNumber.from("1e12"))) {
+      // Если exchangeRate маленький — вероятно, scale = 8
+      exchangeRateScale = 8;
+    }
+
     const suppliedUnderlying = cBal
       .mul(exchangeRate)
-      .div(ethers.BigNumber.from(10).pow(18 + 8 - pool.decimals));
+      .div(ethers.BigNumber.from(10).pow(exchangeRateScale));
+
     const supplied = parseFloat(ethers.utils.formatUnits(suppliedUnderlying, pool.decimals));
     const borrowed = parseFloat(ethers.utils.formatUnits(borrow, pool.decimals));
+
+    console.log(`[${pool.name}] cBal: ${cBal.toString()}, exchangeRate: ${exchangeRate.toString()}, scale: ${exchangeRateScale}, supplied: ${supplied}, borrowed: ${borrowed}`);
 
     let suppliedUSD = supplied;
     let borrowedUSD = borrowed;
