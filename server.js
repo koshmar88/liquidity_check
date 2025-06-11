@@ -193,6 +193,18 @@ async function getEthPrice() {
   return cachedEthPrice;
 }
 
+const comptrollerAddress = "0xAB1c342C7bf5Ec5F02ADEA1c2270670bCa144CbB";
+const comptrollerAbi = [
+  "function markets(address cToken) view returns (bool isListed, uint256 collateralFactorMantissa, bool isComped)"
+];
+const comptroller = new ethers.Contract(comptrollerAddress, comptrollerAbi, provider);
+
+async function getCollateralFactor(cTokenAddress) {
+  const market = await comptroller.markets(cTokenAddress);
+  // collateralFactorMantissa обычно с 18 знаками (например, 800000000000000000 = 0.8)
+  return Number(ethers.utils.formatUnits(market.collateralFactorMantissa, 18));
+}
+
 async function calculateHealthFactor() {
   let totalCollateralUSD = 0;
   let totalBorrowUSD = 0;
@@ -203,18 +215,17 @@ async function calculateHealthFactor() {
   for (const pool of pools) {
     const cToken = new ethers.Contract(pool.address, cTokenAbi, provider);
 
-    const [cBal, borrow, exchangeRate, cTokenDecimals] = await Promise.all([
+    const [cBal, borrow, exchangeRate, cTokenDecimals, collateralFactor] = await Promise.all([
       cToken.balanceOf(userAddress),
       cToken.borrowBalanceStored(userAddress),
       cToken.exchangeRateStored(),
-      cToken.decimals()
+      cToken.decimals(),
+      getCollateralFactor(pool.address)
     ]);
 
     // Определяем scale для exchangeRate (18 или 8)
-    // Обычно: Compound — 18, Iron Bank — 8
     let exchangeRateScale = 18;
     if (exchangeRate.lt(ethers.BigNumber.from("1000000000000"))) {
-      // Если exchangeRate маленький — вероятно, scale = 8
       exchangeRateScale = 8;
     }
 
@@ -225,8 +236,6 @@ async function calculateHealthFactor() {
     const supplied = parseFloat(ethers.utils.formatUnits(suppliedUnderlying, pool.decimals));
     const borrowed = parseFloat(ethers.utils.formatUnits(borrow, pool.decimals));
 
-    console.log(`[${pool.name}] cBal: ${cBal.toString()}, exchangeRate: ${exchangeRate.toString()}, scale: ${exchangeRateScale}, supplied: ${supplied}, borrowed: ${borrowed}`);
-
     let suppliedUSD = supplied;
     let borrowedUSD = borrowed;
 
@@ -236,18 +245,16 @@ async function calculateHealthFactor() {
       ethBorrow = borrowed;
     }
 
-    // Считаем supply для стейблов
-    if (["USDT", "USDC", "DAI"].includes(pool.name)) {
-      totalCollateralUSD += suppliedUSD;
-      breakdown.push(`${pool.name}: 🟢 $${suppliedUSD.toFixed(2)} (${supplied.toFixed(4)} ${pool.name})`);
+    // Считаем supply для всех активов с collateral factor
+    if (suppliedUSD > 0) {
+      totalCollateralUSD += suppliedUSD * collateralFactor;
+      breakdown.push(`${pool.name}: 🟢 $${suppliedUSD.toFixed(2)} (${supplied.toFixed(4)} ${pool.name}) × CF ${collateralFactor}`);
     }
 
     // Считаем долг для всех пулов (ETH и стейблы)
     if (borrowedUSD > 0) {
       totalBorrowUSD += borrowedUSD;
-      if (pool.name !== "ETH") {
-        breakdown.push(`${pool.name}: 🔴 $${borrowedUSD.toFixed(2)} (${borrowed.toFixed(4)} ${pool.name})`);
-      }
+      breakdown.push(`${pool.name}: 🔴 $${borrowedUSD.toFixed(2)} (${borrowed.toFixed(4)} ${pool.name})`);
     }
   }
 
@@ -267,7 +274,7 @@ async function calculateHealthFactor() {
     hf: hf.toFixed(4),
     collateral: totalCollateralUSD,
     borrow: totalBorrowUSD,
-    portfolio, // добавили сюда
+    portfolio,
     breakdown,
     liquidationEthPrice,
     ethPrice
