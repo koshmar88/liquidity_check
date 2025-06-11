@@ -487,3 +487,74 @@ async function getAavePosition(pool) {
   }
   return { supplied, borrowed };
 }
+
+// Адреса токенов-коллатералов (Ethereum mainnet)
+const wstethAddress = "0x7f39c581f595b53c5cb5bbf5c3a809fd54c49e48";
+const wbtcAddress   = "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599";
+const wethAddress   = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+
+// Функция для получения health factor по всем активам
+async function calculateCompoundV3AllCollaterals(address) {
+  try {
+    // Получаем общий borrow
+    const borrowBalance = await comet.methods.borrowBalanceOf(address).call();
+
+    // Массив активов
+    const assets = [
+      { name: "wstETH", address: wstethAddress },
+      { name: "ETH",    address: wethAddress },
+      { name: "WBTC",   address: wbtcAddress }
+    ];
+
+    let totalCollateralUSD = 0;
+    let breakdown = [];
+
+    for (const asset of assets) {
+      // Баланс коллатерала
+      const collateralBalance = await comet.methods.collateralBalanceOf(address, asset.address).call();
+      if (collateralBalance === "0") continue;
+
+      // Информация об активе
+      const assetInfo = await comet.methods.getAssetInfoByAddress(asset.address).call();
+      const collateralFactor = assetInfo.collateralFactor || assetInfo[2];
+      const scale = assetInfo.scale || assetInfo[1];
+
+      // Цена актива
+      const assetPrice = await comet.methods.getPrice(asset.address).call();
+
+      // Переводим баланс в нормальный формат
+      const decimals = scale ? Math.round(Math.log10(Number(scale))) : 18;
+      const balanceNorm = Number(collateralBalance) / (10 ** decimals);
+      const priceNorm = Number(assetPrice) / 1e8; // Comet price обычно 8 знаков
+
+      // USD value с учётом collateralFactor
+      const collateralUSD = balanceNorm * priceNorm * (Number(collateralFactor) / 1e18);
+
+      totalCollateralUSD += collateralUSD;
+      breakdown.push(`${asset.name}: $${collateralUSD.toFixed(2)} (${balanceNorm.toFixed(4)} ${asset.name}) × CF ${(Number(collateralFactor) / 1e18).toFixed(2)}`);
+    }
+
+    // Итоговый health factor
+    const borrowNorm = Number(borrowBalance) / 1e6; // USDT в Comet обычно 6 знаков
+    const hf = borrowNorm > 0 ? totalCollateralUSD / borrowNorm : 0;
+
+    console.log("Borrow Balance:", borrowNorm);
+    console.log("Total Collateral USD:", totalCollateralUSD);
+    console.log("Health Factor:", hf);
+    breakdown.forEach(line => console.log(line));
+
+    return {
+      protocol: "Compound v3",
+      hf: hf.toFixed(4),
+      collateral: totalCollateralUSD,
+      borrow: borrowNorm,
+      breakdown
+    };
+  } catch (error) {
+    console.error("Ошибка при расчете Health Factor:", error);
+    return null;
+  }
+}
+
+// Пример вызова:
+calculateCompoundV3AllCollaterals(userAddress).then(console.log);
