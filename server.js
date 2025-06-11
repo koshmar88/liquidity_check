@@ -228,6 +228,8 @@ async function calculateHealthFactor() {
   let totalBorrowUSD = 0;
   let ethBorrow = 0;
   let ethPrice = await getEthPrice();
+  let wbtcPrice = null;
+  let wstethPrice = null;
   let breakdown = [];
 
   for (const pool of ironBankPools) {
@@ -260,6 +262,7 @@ async function calculateHealthFactor() {
     if (pool.name === "ETH") {
       suppliedUSD = supplied * ethPrice;
       borrowedUSD = borrowed * ethPrice;
+      ethBorrow = borrowed;
     }
     if (pool.name === "WBTC") {
       if (!wbtcPrice) wbtcPrice = await getWbtcPrice();
@@ -317,4 +320,160 @@ async function getWstethPrice() {
   // Можно взять с CoinGecko или другого источника
   const { data } = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=staked-ether&vs_currencies=usd");
   return data["staked-ether"].usd;
+}
+
+async function calculateIronBank() {
+  let totalCollateralUSD = 0;
+  let totalBorrowUSD = 0;
+  let ethBorrow = 0;
+  let ethPrice = await getEthPrice();
+  let wbtcPrice = null;
+  let wstethPrice = null;
+  let breakdown = [];
+
+  for (const pool of ironBankPools) {
+    const cToken = new ethers.Contract(pool.address, cTokenAbi, provider);
+    const [cBal, borrow, exchangeRate, cTokenDecimals, collateralFactor] = await Promise.all([
+      cToken.balanceOf(userAddress),
+      cToken.borrowBalanceStored(userAddress),
+      cToken.exchangeRateStored(),
+      cToken.decimals(),
+      getCollateralFactor(pool.address)
+    ]);
+    let exchangeRateScale = 18;
+    if (exchangeRate.lt(ethers.BigNumber.from("1000000000000"))) {
+      exchangeRateScale = 8;
+    }
+    const suppliedUnderlying = cBal.mul(exchangeRate).div(ethers.BigNumber.from(10).pow(exchangeRateScale));
+    const supplied = parseFloat(ethers.utils.formatUnits(suppliedUnderlying, pool.decimals));
+    const borrowed = parseFloat(ethers.utils.formatUnits(borrow, pool.decimals));
+    let suppliedUSD = supplied;
+    let borrowedUSD = borrowed;
+    if (pool.name === "ETH") {
+      suppliedUSD = supplied * ethPrice;
+      borrowedUSD = borrowed * ethPrice;
+      ethBorrow = borrowed;
+    }
+    if (pool.name === "WBTC") {
+      if (!wbtcPrice) wbtcPrice = await getWbtcPrice();
+      suppliedUSD = supplied * wbtcPrice;
+      borrowedUSD = borrowed * wbtcPrice;
+    }
+    if (pool.name === "wstETH") {
+      if (!wstethPrice) wstethPrice = await getWstethPrice();
+      suppliedUSD = supplied * wstethPrice;
+      borrowedUSD = borrowed * wstethPrice;
+    }
+    if (suppliedUSD > 0) {
+      totalCollateralUSD += suppliedUSD * collateralFactor;
+      breakdown.push(`${pool.name}: 🟢 $${suppliedUSD.toFixed(2)} (${supplied.toFixed(4)} ${pool.name}) × CF ${collateralFactor}`);
+    }
+    if (borrowedUSD > 0) {
+      totalBorrowUSD += borrowedUSD;
+      breakdown.push(`${pool.name}: 🔴 $${borrowedUSD.toFixed(2)} (${borrowed.toFixed(4)} ${pool.name})`);
+    }
+  }
+  let hf = totalBorrowUSD > 0 ? totalCollateralUSD / totalBorrowUSD : 0;
+  let portfolio = totalCollateralUSD - totalBorrowUSD;
+  let liquidationEthPrice = null;
+  if (ethBorrow > 0) {
+    liquidationEthPrice = totalCollateralUSD / ethBorrow;
+  }
+  return {
+    protocol: "Iron Bank",
+    hf: hf.toFixed(4),
+    collateral: totalCollateralUSD,
+    borrow: totalBorrowUSD,
+    portfolio,
+    breakdown,
+    liquidationEthPrice,
+    ethPrice
+  };
+}
+
+// Аналогично реализуйте для Compound и Aave (пример для Compound ниже)
+async function getCompoundCollateralFactor(cTokenAddress) {
+  // Используйте свой Compound Comptroller и ABI
+  const compoundComptrollerAddress = "0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B";
+  const compoundComptroller = new ethers.Contract(compoundComptrollerAddress, comptrollerAbi, provider);
+  const market = await compoundComptroller.markets(cTokenAddress);
+  return Number(ethers.utils.formatUnits(market.collateralFactorMantissa, 18));
+}
+
+async function calculateCompound() {
+  let totalCollateralUSD = 0;
+  let totalBorrowUSD = 0;
+  let ethPrice = await getEthPrice();
+  let wbtcPrice = null;
+  let wstethPrice = null;
+  let breakdown = [];
+  for (const pool of compoundPools) {
+    const cToken = new ethers.Contract(pool.address, cTokenAbi, provider);
+    const [cBal, borrow, exchangeRate, collateralFactor] = await Promise.all([
+      cToken.balanceOf(userAddress),
+      cToken.borrowBalanceStored(userAddress),
+      cToken.exchangeRateStored(),
+      getCompoundCollateralFactor(pool.address)
+    ]);
+    const suppliedUnderlying = cBal.mul(exchangeRate).div(ethers.BigNumber.from(10).pow(18 + 8 - pool.underlyingDecimals));
+    const supplied = parseFloat(ethers.utils.formatUnits(suppliedUnderlying, pool.underlyingDecimals));
+    const borrowed = parseFloat(ethers.utils.formatUnits(borrow, pool.underlyingDecimals));
+    let suppliedUSD = supplied;
+    let borrowedUSD = borrowed;
+    if (pool.name === "ETH") {
+      suppliedUSD = supplied * ethPrice;
+      borrowedUSD = borrowed * ethPrice;
+    }
+    if (pool.name === "WBTC") {
+      if (!wbtcPrice) wbtcPrice = await getWbtcPrice();
+      suppliedUSD = supplied * wbtcPrice;
+      borrowedUSD = borrowed * wbtcPrice;
+    }
+    if (pool.name === "wstETH") {
+      if (!wstethPrice) wstethPrice = await getWstethPrice();
+      suppliedUSD = supplied * wstethPrice;
+      borrowedUSD = borrowed * wstethPrice;
+    }
+    if (suppliedUSD > 0) {
+      totalCollateralUSD += suppliedUSD * collateralFactor;
+      breakdown.push(`${pool.name}: 🟢 $${suppliedUSD.toFixed(2)} (${supplied.toFixed(4)} ${pool.name}) × CF ${collateralFactor}`);
+    }
+    if (borrowedUSD > 0) {
+      totalBorrowUSD += borrowedUSD;
+      breakdown.push(`${pool.name}: 🔴 $${borrowedUSD.toFixed(2)} (${borrowed.toFixed(4)} ${pool.name})`);
+    }
+  }
+  let hf = totalBorrowUSD > 0 ? totalCollateralUSD / totalBorrowUSD : 0;
+  let portfolio = totalCollateralUSD - totalBorrowUSD;
+  return {
+    protocol: "Compound",
+    hf: hf.toFixed(4),
+    collateral: totalCollateralUSD,
+    borrow: totalBorrowUSD,
+    portfolio,
+    breakdown
+  };
+}
+
+// Для Aave используйте аналогичную структуру (свою функцию расчёта supply/borrow/collateralFactor)
+
+async function calculateAave() {
+  // ...реализация аналогична, используйте aavePools и их токены...
+  // Верните объект с breakdown, hf, collateral, borrow, portfolio, protocol: "Aave"
+  return {
+    protocol: "Aave",
+    hf: "1.00",
+    collateral: 0,
+    borrow: 0,
+    portfolio: 0,
+    breakdown: []
+  };
+}
+
+// Итоговая функция
+async function calculateAllHealthFactors() {
+  const iron = await calculateIronBank();
+  const compound = await calculateCompound();
+  const aave = await calculateAave();
+  return [iron, compound, aave];
 }
