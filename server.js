@@ -114,35 +114,37 @@ async function handleBotCommands() {
     } else if (message === "/start") {
       await sendTelegramMessage("👋 Привет! Я буду уведомлять тебя о резких изменениях ликвидности. Используй команду /status для проверки.", userId);
     } else if (message === "/hf") {
-  try {
-    const { hf, collateral, borrow, breakdown, liquidationEthPrice, ethPrice } = await calculateHealthFactor();
+      try {
+        const { hf, collateral, borrow, breakdown, liquidationEthPrice, ethPrice } = await calculateHealthFactor();
 
-    let text = `📉 Текущий Health Factor: ${hf}\n\n`;
-    text += `💼 Общий залог: $${collateral.toFixed(2)}\n💣 Общий долг: $${borrow.toFixed(2)}\n\n`;
+        let text = `📉 Текущий Health Factor: ${hf}\n\n`;
+        text += `💼 Общий залог: $${collateral.toFixed(2)}\n💣 Общий долг: $${borrow.toFixed(2)}\n\n`;
 
-    for (const line of breakdown) {
-      text += `• ${line}\n`;
-    }
+        for (const line of breakdown) {
+          text += `• ${line}\n`;
+        }
 
-    text += `\n📈 Цена ETH: $${ethPrice.toFixed(2)}\n`;
+        text += `\n📈 Цена ETH: $${ethPrice.toFixed(2)}\n`;
 
-    if (liquidationEthPrice) {
-      text += `⚠️ Ликвидация при цене ETH ≈ $${liquidationEthPrice.toFixed(2)}`;
-    } else {
-      text += `✅ До ликвидации далеко`;
-    }
+        if (liquidationEthPrice) {
+          text += `⚠️ Ликвидация при цене ETH ≈ $${liquidationEthPrice.toFixed(2)}`;
+        } else {
+          text += `✅ До ликвидации далеко`;
+        }
 
-    await sendTelegramMessage(text, userId);
+        await sendTelegramMessage(text, userId);
+      } catch (err) {
+        console.error("❌ Ошибка в calculateHealthFactor:", err);
+        await sendTelegramMessage("❌ Ошибка при расчёте Health Factor. Проверьте логи сервера.", userId);
+      }
+    } // ←←← ДОБАВЬТЕ ЭТУ СКОБКУ
+
+    // Остальной код должен быть вне блока /hf!
+    const selfMonitor = {
+      address: "0x2a4cE5BaCcB98E5F95D37F8B3D1065754E0389CD",
+      lastStatus: "safe"
+    };
   } catch (err) {
-    console.error("❌ Ошибка в calculateHealthFactor:", err);
-    await sendTelegramMessage("❌ Ошибка при расчёте Health Factor. Проверьте логи сервера.", userId);
-  }
-}
-const selfMonitor = {
-  address: "0x2a4cE5BaCcB98E5F95D37F8B3D1065754E0389CD",
-  lastStatus: "safe"
-}
- } catch (err) {
     console.error("❌ Ошибка в handleBotCommands:", err);
   }
 }
