@@ -470,3 +470,14 @@ async function getAavePosition(pool) {
   }
   return { supplied, borrowed };
 }
+
+async function getWstethPrice() {
+  // Через CoinGecko API
+  const { data } = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=staked-ether&vs_currencies=usd");
+  return data["staked-ether"].usd;
+}
+
+async function getWbtcPrice() {
+  const { data } = await axios.get("https://api.binance.com/api/v3/ticker/price?symbol=WBTCUSDT");
+  return parseFloat(data.price);
+}
