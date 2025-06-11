@@ -300,84 +300,60 @@ async function calculateIronBank() {
 }
 
 // Аналогично для Compound:
-async function calculateCompound() {
-  let totalCollateralUSD = 0;
-  let totalBorrowUSD = 0;
-  let totalSuppliedUSD = 0;
-  let ethPrice = await getEthPrice();
-  let wbtcPrice = null;
-  let wstethPrice = null;
-  let breakdown = [];
+const Web3 = require('web3');
+const web3 = new Web3('https://eth-mainnet.g.alchemy.com/v2/7QH7n3H4DakNuBQsKL8IcLRHDTGzG_oJ');
 
-  for (const pool of compoundPools) {
-    const cToken = new ethers.Contract(pool.address, cTokenAbi, provider);
+// Адрес контракта Compound v3 Comet для USDT
+const cometAddress = "0xc3d688B66703497DAA19211EEdff47f25384cdc3"; // Это для USDT, замени на нужный адрес для других активов
 
-    // Получение borrow
-    let borrow = ethers.BigNumber.from(0);
+// ABI для работы с контракта Compound v3
+const cometAbi = [
+    "function borrowBalanceOf(address) view returns (uint256)",
+    "function collateralBalanceOf(address, address) view returns (uint256)",
+    "function getAssetInfoByAddress(address) view returns (uint128 offset, uint96 scale, uint64 collateralFactor, ...)",
+    "function getPrice(address) view returns (uint256)" // Для получения цены актива
+];
+
+// Получаем контракт
+const comet = new web3.eth.Contract(cometAbi, cometAddress);
+
+// Функция для получения данных для вычисления Health Factor
+async function calculateCompoundV3(address) {
     try {
-      borrow = await cToken.borrowBalanceStored(userAddress);
-    } catch (e) {
-      console.warn(`⚠️ Не удалось получить borrow для ${pool.name}:`, e.message);
+        // Получаем баланс кредита
+        const borrowBalance = await comet.methods.borrowBalanceOf(address).call();
+        const collateralBalance = await comet.methods.collateralBalanceOf(address, cometAddress).call();
+        
+        // Получаем информацию об активе
+        const assetInfo = await comet.methods.getAssetInfoByAddress(address).call();
+
+        // Пример для получения текущего collateral factor (можно расширить, чтобы учитывать другие активы)
+        const collateralFactor = assetInfo[2]; // Вероятно, это 3-й параметр, т.е. collateralFactor
+
+        // Получаем цену актива (например, ETH или wstETH)
+        const assetPrice = await comet.methods.getPrice(address).call();
+
+        // Пример расчета HF
+        const healthFactor = (collateralBalance * collateralFactor) / borrowBalance;
+
+        console.log("Borrow Balance: ", borrowBalance);
+        console.log("Collateral Balance: ", collateralBalance);
+        console.log("Collateral Factor: ", collateralFactor);
+        console.log("Asset Price: ", assetPrice);
+        console.log("Health Factor: ", healthFactor);
+
+        return healthFactor;
+    } catch (error) {
+        console.error("Ошибка при расчете Health Factor:", error);
     }
-
-    const [cBal, exchangeRate, collateralFactor] = await Promise.all([
-      cToken.balanceOf(userAddress),
-      cToken.exchangeRateStored(),
-      getCompoundCollateralFactor(pool.address)
-    ]);
-
-    const suppliedUnderlying = cBal.mul(exchangeRate).div(
-      ethers.BigNumber.from(10).pow(18 + 8 - pool.underlyingDecimals)
-    );
-    const supplied = parseFloat(ethers.utils.formatUnits(suppliedUnderlying, pool.underlyingDecimals));
-    const borrowed = parseFloat(ethers.utils.formatUnits(borrow, pool.underlyingDecimals));
-
-    let suppliedUSD = supplied;
-    let borrowedUSD = borrowed;
-
-    if (pool.name === "ETH") {
-      suppliedUSD = supplied * ethPrice;
-      borrowedUSD = borrowed * ethPrice;
-    } else if (pool.name === "WBTC") {
-      if (!wbtcPrice) wbtcPrice = await getWbtcPrice();
-      suppliedUSD = supplied * wbtcPrice;
-      borrowedUSD = borrowed * wbtcPrice;
-    } else if (pool.name === "wstETH") {
-      if (!wstethPrice) wstethPrice = await getWstethPrice();
-      suppliedUSD = supplied * wstethPrice;
-      borrowedUSD = borrowed * wstethPrice;
-    }
-
-    // Добавляем лог
-    console.log(`[Compound] ${pool.name}: supplied $${suppliedUSD.toFixed(2)}, borrowed $${borrowedUSD.toFixed(2)}`);
-
-    // Учет supply
-    if (suppliedUSD > 0) {
-      totalSuppliedUSD += suppliedUSD;
-      totalCollateralUSD += suppliedUSD * collateralFactor;
-      breakdown.push(`${pool.name}: 🟢 $${suppliedUSD.toFixed(2)} (${supplied.toFixed(4)} ${pool.name}) × CF ${collateralFactor}`);
-    }
-
-    // Учет borrow
-    if (borrowedUSD > 0) {
-      totalBorrowUSD += borrowedUSD;
-      breakdown.push(`${pool.name}: 🔴 $${borrowedUSD.toFixed(2)} (${borrowed.toFixed(4)} ${pool.name})`);
-    }
-  }
-
-  const hf = totalBorrowUSD > 0 ? totalCollateralUSD / totalBorrowUSD : 0;
-  const portfolio = totalSuppliedUSD - totalBorrowUSD;
-  const result = {
-    protocol: "Compound",
-    hf: hf.toFixed(4),
-    collateral: totalCollateralUSD,
-    borrow: totalBorrowUSD,
-    portfolio,
-    breakdown
-  };
-
-  return result;
 }
+
+// Вводим адрес пользователя для анализа
+const userAddress = "0x2a4cE5BaCcB98E5F95D37F8B3D1065754E0389CD"; // Замените на адрес вашего пользователя
+
+calculateCompoundV3(userAddress).then((healthFactor) => {
+    console.log("Health Factor пользователя:", healthFactor);
+});
 
 
 // Аналогично для Aave:
@@ -480,4 +456,9 @@ async function getWstethPrice() {
   // Через CoinGecko API
   const { data } = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=staked-ether&vs_currencies=usd");
   return data["staked-ether"].usd;
+}
+async function getWbtcPrice() {
+  // Получаем цену WBTC через Binance API
+  const { data } = await axios.get("https://api.binance.com/api/v3/ticker/price?symbol=WBTCUSDT");
+  return parseFloat(data.price);
 }
