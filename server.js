@@ -314,10 +314,10 @@ const comet = new ethers.Contract(cometAddress, cometAbi, provider);
 
 // Коллатералы и их decimals
 const collaterals = [
-  { name: "ETH", address: "0x0000000000000000000000000000000000000000", decimals: 18 },
-  { name: "WBTC", address: "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", decimals: 8 },
-  { name: "wstETH", address: "0x7f39c581f595b53c5cb5bbf5c3a809fd54c49e48", decimals: 18 }
-];
+  { name: "ETH", address: "0xc0c73a184b2e0e9117af8d2c3c5d98c24e9b835d", decimals: 18 },
+  { name: "WBTC", address: "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599", decimals: 8 },
+  { name: "wstETH", address: "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0", decimals: 18 }
+];g
 async function calculateCompoundV3(userAddress) {
   try {
     let totalCollateralUSD = 0;
