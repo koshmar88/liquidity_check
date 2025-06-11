@@ -316,10 +316,42 @@ const cometAddress = "0xc3d688B66703497DAA19211EEdff47f25384cdc3"; // Это д�
 
 // ABI для работы с контракта Compound v3
 const cometAbi = [
-    "function borrowBalanceOf(address) view returns (uint256)",
-    "function collateralBalanceOf(address, address) view returns (uint256)",
-    "function getAssetInfoByAddress(address) view returns (uint128 offset, uint96 scale, uint64 collateralFactor, ...)",
-    "function getPrice(address) view returns (uint256)" // Для получения цены актива
+  {
+    "constant": true,
+    "inputs": [{ "name": "account", "type": "address" }],
+    "name": "borrowBalanceOf",
+    "outputs": [{ "name": "", "type": "uint256" }],
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      { "name": "account", "type": "address" },
+      { "name": "asset", "type": "address" }
+    ],
+    "name": "collateralBalanceOf",
+    "outputs": [{ "name": "", "type": "uint256" }],
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [{ "name": "asset", "type": "address" }],
+    "name": "getAssetInfoByAddress",
+    "outputs": [
+      { "name": "offset", "type": "uint128" },
+      { "name": "scale", "type": "uint96" },
+      { "name": "collateralFactor", "type": "uint64" }
+      // ... добавьте остальные outputs, если нужны
+    ],
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [{ "name": "asset", "type": "address" }],
+    "name": "getPrice",
+    "outputs": [{ "name": "", "type": "uint256" }],
+    "type": "function"
+  }
 ];
 
 // Получаем контракт
