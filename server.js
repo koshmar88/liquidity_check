@@ -510,28 +510,32 @@ async function calculateCompoundV3AllCollaterals(address) {
     let breakdown = [];
 
     for (const asset of assets) {
-      // Баланс коллатерала
-      const collateralBalance = await comet.methods.collateralBalanceOf(address, asset.address).call();
-      if (collateralBalance === "0") continue;
+      try {
+        const collateralBalance = await comet.methods.collateralBalanceOf(address, asset.address).call();
+        if (collateralBalance === "0") continue;
 
-      // Информация об активе
-      const assetInfo = await comet.methods.getAssetInfoByAddress(asset.address).call();
-      const collateralFactor = assetInfo.collateralFactor || assetInfo[2];
-      const scale = assetInfo.scale || assetInfo[1];
+        // Информация об активе
+        const assetInfo = await comet.methods.getAssetInfoByAddress(asset.address).call();
+        const collateralFactor = assetInfo.collateralFactor || assetInfo[2];
+        const scale = assetInfo.scale || assetInfo[1];
 
-      // Цена актива
-      const assetPrice = await comet.methods.getPrice(asset.address).call();
+        // Цена актива
+        const assetPrice = await comet.methods.getPrice(asset.address).call();
 
-      // Переводим баланс в нормальный формат
-      const decimals = scale ? Math.round(Math.log10(Number(scale))) : 18;
-      const balanceNorm = Number(collateralBalance) / (10 ** decimals);
-      const priceNorm = Number(assetPrice) / 1e8; // Comet price обычно 8 знаков
+        // Переводим баланс в нормальный формат
+        const decimals = scale ? Math.round(Math.log10(Number(scale))) : 18;
+        const balanceNorm = Number(collateralBalance) / (10 ** decimals);
+        const priceNorm = Number(assetPrice) / 1e8; // Comet price обычно 8 знаков
 
-      // USD value с учётом collateralFactor
-      const collateralUSD = balanceNorm * priceNorm * (Number(collateralFactor) / 1e18);
+        // USD value с учётом collateralFactor
+        const collateralUSD = balanceNorm * priceNorm * (Number(collateralFactor) / 1e18);
 
-      totalCollateralUSD += collateralUSD;
-      breakdown.push(`${asset.name}: $${collateralUSD.toFixed(2)} (${balanceNorm.toFixed(4)} ${asset.name}) × CF ${(Number(collateralFactor) / 1e18).toFixed(2)}`);
+        totalCollateralUSD += collateralUSD;
+        breakdown.push(`${asset.name}: $${collateralUSD.toFixed(2)} (${balanceNorm.toFixed(4)} ${asset.name}) × CF ${(Number(collateralFactor) / 1e18).toFixed(2)}`);
+      } catch (e) {
+        console.warn(`⚠️ Не удалось получить collateral для ${asset.name}:`, e.message);
+        continue;
+      }
     }
 
     // Итоговый health factor
