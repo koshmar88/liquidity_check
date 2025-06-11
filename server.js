@@ -222,7 +222,7 @@ async function getCollateralFactor(cTokenAddress) {
   return Number(ethers.utils.formatUnits(market.collateralFactorMantissa, 18));
 }
 
-async function calculateHealthFactor() {
+async function calculateIronBank() {
   let totalCollateralUSD = 0;
   let totalBorrowUSD = 0;
   let totalSuppliedUSD = 0;
@@ -419,7 +419,7 @@ async function calculateAave() {
 
 // Итоговая функция
 async function calculateAllHealthFactors() {
-  const iron = await calculateIronBank();
+  const iron = await calculateHealthFactor(); // если хотите оставить старое имя
   const compound = await calculateCompound();
   const aave = await calculateAave();
   return [iron, compound, aave];
