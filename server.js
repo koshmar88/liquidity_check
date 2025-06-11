@@ -300,88 +300,83 @@ async function calculateIronBank() {
   };
 }
 // Аналогично для Compound:
-const Web3 = require('web3');
-const web3 = new Web3('https://eth-mainnet.g.alchemy.com/v2/7QH7n3H4DakNuBQsKL8IcLRHDTGzG_oJ');
+const { ethers } = require("ethers");
 
-// Адрес контракта Compound v3 Comet для USDT
-const cometAddress = "0xA17581A9E3356d9A858b789D68B4d866e593aE94"; // Это для USDT, замени на нужный адрес для других активов
+// Подключение провайдера
+const { ethers } = require("ethers");
 
-// ABI для работы с контракта Compound v3
+const provider = new ethers.providers.JsonRpcProvider("https://eth-mainnet.g.alchemy.com/v2/7QH7n3H4DakNuBQsKL8IcLRHDTGzG_oJ");
+
+const cometAddress = "0xA17581A9E3356d9A858b789D68B4d866e593aE94"; // Compound v3 USDT Comet
+
 const cometAbi = [
-  {
-    "constant": true,
-    "inputs": [{ "name": "account", "type": "address" }],
-    "name": "borrowBalanceOf",
-    "outputs": [{ "name": "", "type": "uint256" }],
-    "type": "function"
-  },
-  {
-    "constant": true,
-    "inputs": [
-      { "name": "account", "type": "address" },
-      { "name": "asset", "type": "address" }
-    ],
-    "name": "collateralBalanceOf",
-    "outputs": [{ "name": "", "type": "uint256" }],
-    "type": "function"
-  },
-  {
-    "constant": true,
-    "inputs": [{ "name": "asset", "type": "address" }],
-    "name": "getAssetInfoByAddress",
-    "outputs": [
-      { "name": "offset", "type": "uint128" },
-      { "name": "scale", "type": "uint96" },
-      { "name": "collateralFactor", "type": "uint64" }
-      // ... добавьте остальные outputs, если нужны
-    ],
-    "type": "function"
-  },
-  {
-    "constant": true,
-    "inputs": [{ "name": "asset", "type": "address" }],
-    "name": "getPrice",
-    "outputs": [{ "name": "", "type": "uint256" }],
-    "type": "function"
-  }
+  "function borrowBalanceOf(address) view returns (uint256)",
+  "function collateralBalanceOf(address, address) view returns (uint256)",
+  "function getAssetInfoByAddress(address) view returns (uint128, uint96, uint64)",
+  "function getPrice(address) view returns (uint256)"
 ];
 
-// Получаем контракт
-const comet = new web3.eth.Contract(cometAbi, cometAddress);
+const comet = new ethers.Contract(cometAddress, cometAbi, provider);
 
-// Функция для получения данных для вычисления Health Factor
-async function calculateCompoundV3(address) {
-    try {
-        // Получаем баланс кредита
-        const borrowBalance = await comet.methods.borrowBalanceOf(address).call();
-        const collateralBalance = await comet.methods.collateralBalanceOf(address, cometAddress).call();
-        
-        // Получаем информацию об активе
-        const assetInfo = await comet.methods.getAssetInfoByAddress(address).call();
+// Коллатералы и их decimals
+const collaterals = [
+  { name: "ETH", address: "0x0000000000000000000000000000000000000000", decimals: 18 },
+  { name: "WBTC", address: "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", decimals: 8 },
+  { name: "wstETH", address: "0x7f39c581f595b53c5cb5bb5986ac7e713a87f8ff", decimals: 18 }
+];
 
-        // Пример для получения текущего collateral factor (можно расширить, чтобы учитывать другие активы)
-        const collateralFactor = assetInfo[2]; // Вероятно, это 3-й параметр, т.е. collateralFactor
+async function calculateCompoundV3(userAddress) {
+  try {
+    let totalCollateralUSD = 0;
+    let breakdown = [];
 
-        // Получаем цену актива (например, ETH или wstETH)
-        const assetPrice = await comet.methods.getPrice(address).call();
+    for (const asset of collaterals) {
+      const [collateralRaw, assetInfo, priceRaw] = await Promise.all([
+        comet.collateralBalanceOf(userAddress, asset.address),
+        comet.getAssetInfoByAddress(asset.address),
+        comet.getPrice(asset.address)
+      ]);
 
-        // Пример расчета HF
-        const healthFactor = (collateralBalance * collateralFactor) / borrowBalance;
+      const collateral = Number(ethers.utils.formatUnits(collateralRaw, asset.decimals));
+      const price = Number(priceRaw) / 1e8; // 8 decimals in Compound price oracle
+      const collateralFactor = Number(assetInfo[2]) / 1e18;
 
-        console.log("Borrow Balance: ", borrowBalance);
-        console.log("Collateral Balance: ", collateralBalance);
-        console.log("Collateral Factor: ", collateralFactor);
-        console.log("Asset Price: ", assetPrice);
-        console.log("Health Factor: ", healthFactor);
+      const valueUSD = collateral * price;
+      const effectiveCollateral = valueUSD * collateralFactor;
 
-        return healthFactor;
-    } catch (error) {
-        console.error("Ошибка при расчете Health Factor:", error);
+      if (collateral > 0) {
+        breakdown.push(`${asset.name}: 🟢 $${valueUSD.toFixed(2)} (${collateral.toFixed(4)} ${asset.name}) × CF ${collateralFactor.toFixed(2)}`);
+        totalCollateralUSD += effectiveCollateral;
+      }
     }
+
+    const borrowRaw = await comet.borrowBalanceOf(userAddress);
+    const borrow = Number(ethers.utils.formatUnits(borrowRaw, 6)); // USDT base asset
+    const healthFactor = borrow > 0 ? totalCollateralUSD / borrow : Infinity;
+    const portfolio = totalCollateralUSD - borrow;
+
+    console.log("📉 Health Factor:", healthFactor.toFixed(4));
+    console.log("💼 Залог:", `$${totalCollateralUSD.toFixed(2)}`);
+    console.log("💣 Долг:", `$${borrow.toFixed(2)}`);
+    console.log("💰 Портфель:", `$${portfolio.toFixed(2)}`);
+    breakdown.forEach(line => console.log("•", line));
+
+    return {
+      hf: healthFactor.toFixed(4),
+      collateral: totalCollateralUSD,
+      borrow,
+      portfolio,
+      breakdown
+    };
+
+  } catch (err) {
+    console.error("❌ Ошибка при расчете Compound V3:", err);
+    return null;
+  }
 }
-calculateCompoundV3(userAddress).then((healthFactor) => {
-    console.log("Health Factor пользователя:", healthFactor);
-});
+
+// 👉 Замените на ваш адрес
+calculateCompoundV3("0x2a4cE5BaCcB98E5F95D37F8B3D1065754E0389CD");
 
 
 // Аналогично для Aave:
