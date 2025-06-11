@@ -134,24 +134,18 @@ app.post("/webhook", async (req, res) => {
     await sendTelegramMessage("👋 Привет! Я буду уведомлять тебя о резких изменениях ликвидности. Используй команду /status для проверки.", userId);
   } else if (message === "/hf") {
     try {
-      const { hf, collateral, borrow, portfolio, breakdown, liquidationEthPrice, ethPrice } = await calculateHealthFactor();
-
-      let text = `📉 Текущий Health Factor: ${hf}\n\n`;
-      text += `💼 Общий залог: $${collateral.toFixed(2)}\n💣 Общий долг: $${borrow.toFixed(2)}\n`;
-      text += `💰 Портфель: $${portfolio.toFixed(2)}\n\n`;
-
-      for (const line of breakdown) {
-        text += `• ${line}\n`;
+      const results = await calculateAllHealthFactors();
+      let text = "";
+      for (const res of results) {
+        text += `\n=== ${res.protocol} ===\n`;
+        text += `📉 Health Factor: ${res.hf}\n💼 Залог: $${res.collateral.toFixed(2)}\n💣 Долг: $${res.borrow.toFixed(2)}\n💰 Портфель: $${res.portfolio.toFixed(2)}\n`;
+        for (const line of res.breakdown) {
+          text += `• ${line}\n`;
+        }
+        if (res.liquidationEthPrice) {
+          text += `⚠️ Ликвидация при цене ETH ≈ $${res.liquidationEthPrice.toFixed(2)}\n`;
+        }
       }
-
-      text += `\n📈 Цена ETH: $${ethPrice.toFixed(2)}\n`;
-
-      if (liquidationEthPrice) {
-        text += `⚠️ Ликвидация при цене ETH ≈ $${liquidationEthPrice.toFixed(2)}`;
-      } else {
-        text += `✅ До ликвидации далеко`;
-      }
-
       await sendTelegramMessage(text, userId);
     } catch (err) {
       console.error("❌ Ошибка в calculateHealthFactor:", err);
