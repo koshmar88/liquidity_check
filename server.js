@@ -235,14 +235,18 @@ async function calculateHealthFactor() {
       ethBorrow = borrowed;
     }
 
-    // Считаем только supply для стейблов и borrow только для ETH
+    // Считаем supply для стейблов
     if (["USDT", "USDC", "DAI"].includes(pool.name)) {
       totalCollateralUSD += suppliedUSD;
       breakdown.push(`${pool.name}: 🟢 $${suppliedUSD.toFixed(2)} (${supplied.toFixed(4)} ${pool.name})`);
     }
-    if (pool.name === "ETH") {
+
+    // Считаем долг для всех пулов (ETH и стейблы)
+    if (borrowedUSD > 0) {
       totalBorrowUSD += borrowedUSD;
-      breakdown.push(`${pool.name}: 🔴 $${borrowedUSD.toFixed(2)} (${borrowed.toFixed(4)} ETH)`);
+      if (pool.name !== "ETH") {
+        breakdown.push(`${pool.name}: 🔴 $${borrowedUSD.toFixed(2)} (${borrowed.toFixed(4)} ${pool.name})`);
+      }
     }
   }
 
