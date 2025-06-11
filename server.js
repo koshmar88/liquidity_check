@@ -222,6 +222,8 @@ async function getCollateralFactor(cTokenAddress) {
   return Number(ethers.utils.formatUnits(market.collateralFactorMantissa, 18));
 }
 
+const getCompoundCollateralFactor = getCollateralFactor;
+
 async function calculateIronBank() {
   let totalCollateralUSD = 0;
   let totalBorrowUSD = 0;
