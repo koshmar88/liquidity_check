@@ -212,7 +212,7 @@ async function calculateHealthFactor() {
     // Определяем scale для exchangeRate (18 или 8)
     // Обычно: Compound — 18, Iron Bank — 8
     let exchangeRateScale = 18;
-    if (exchangeRate.lt(ethers.BigNumber.from("1e12"))) {
+    if (exchangeRate.lt(ethers.BigNumber.from("1000000000000"))) {
       // Если exchangeRate маленький — вероятно, scale = 8
       exchangeRateScale = 8;
     }
