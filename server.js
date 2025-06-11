@@ -166,3 +166,80 @@ checkLiquidity();
 function checkSelfHealth() {
   // Пока функция не реализована, чтобы не было ошибки
 }
+
+const cTokenAbi = [
+  "function balanceOf(address) view returns (uint256)",
+  "function borrowBalanceStored(address) view returns (uint256)",
+  "function exchangeRateStored() view returns (uint256)",
+  "function decimals() view returns (uint8)"
+];
+const userAddress = selfMonitor.address;
+
+async function getEthPrice() {
+  // Можно заменить на свой источник, если нужно
+  const { data } = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd");
+  return data.ethereum.usd;
+}
+
+async function calculateHealthFactor() {
+  let totalCollateralUSD = 0;
+  let totalBorrowUSD = 0;
+  let ethBorrow = 0;
+  let ethPrice = await getEthPrice();
+  let breakdown = [];
+
+  for (const pool of pools) {
+    const cToken = new ethers.Contract(pool.address, cTokenAbi, provider);
+
+    // Получаем баланс cToken и borrow
+    const [cBal, borrow, exchangeRate] = await Promise.all([
+      cToken.balanceOf(userAddress),
+      cToken.borrowBalanceStored(userAddress),
+      cToken.exchangeRateStored()
+    ]);
+
+    // suppliedUnderlying = (cTokenBal * exchangeRate) / 10^(18 + 8 - pool.decimals)
+    const suppliedUnderlying = cBal
+      .mul(exchangeRate)
+      .div(ethers.BigNumber.from(10).pow(18 + 8 - pool.decimals));
+    const supplied = parseFloat(ethers.utils.formatUnits(suppliedUnderlying, pool.decimals));
+    const borrowed = parseFloat(ethers.utils.formatUnits(borrow, pool.decimals));
+
+    let suppliedUSD = supplied;
+    let borrowedUSD = borrowed;
+
+    if (pool.name === "ETH") {
+      suppliedUSD = supplied * ethPrice;
+      borrowedUSD = borrowed * ethPrice;
+      ethBorrow = borrowed;
+    }
+
+    // Считаем только supply для стейблов и borrow только для ETH
+    if (["USDT", "USDC", "DAI"].includes(pool.name)) {
+      totalCollateralUSD += suppliedUSD;
+      breakdown.push(`${pool.name}: 🟢 $${suppliedUSD.toFixed(2)} (${supplied.toFixed(4)} ${pool.name})`);
+    }
+    if (pool.name === "ETH") {
+      totalBorrowUSD += borrowedUSD;
+      breakdown.push(`${pool.name}: 🔴 $${borrowedUSD.toFixed(2)} (${borrowed.toFixed(4)} ETH)`);
+    }
+  }
+
+  // Health Factor = totalCollateralUSD / totalBorrowUSD
+  let hf = totalBorrowUSD > 0 ? totalCollateralUSD / totalBorrowUSD : 0;
+
+  // Цена ETH для ликвидации (грубо: когда collateral == borrow)
+  let liquidationEthPrice = null;
+  if (ethBorrow > 0) {
+    liquidationEthPrice = totalCollateralUSD / ethBorrow;
+  }
+
+  return {
+    hf: hf.toFixed(4),
+    collateral: totalCollateralUSD,
+    borrow: totalBorrowUSD,
+    breakdown,
+    liquidationEthPrice,
+    ethPrice
+  };
+}
