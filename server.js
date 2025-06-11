@@ -2,6 +2,11 @@ const ethers = require("ethers");
 const axios = require("axios");
 const fs = require("fs");
 
+const selfMonitor = {
+  address: "0x2a4cE5BaCcB98E5F95D37F8B3D1065754E0389CD",
+  lastStatus: "safe"
+};
+
 // === 🔐 Конфигурация из переменных окружения ===
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const RPC_URL = process.env.RPC_URL;
@@ -140,10 +145,6 @@ async function handleBotCommands() {
     } // ←←← ДОБАВЬТЕ ЭТУ СКОБКУ
 
     // Остальной код должен быть вне блока /hf!
-    const selfMonitor = {
-      address: "0x2a4cE5BaCcB98E5F95D37F8B3D1065754E0389CD",
-      lastStatus: "safe"
-    };
   } catch (err) {
     console.error("❌ Ошибка в handleBotCommands:", err);
   }
