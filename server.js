@@ -414,7 +414,7 @@ async function calculateCompound() {
   for (const pool of compoundPools) {
     const cToken = new ethers.Contract(pool.address, cTokenAbi, provider);
 
-    // Получаем только borrow для USDT (и других стейблов, если нужно)
+    // Получаем borrow только для USDT (и других стейблов, если нужно)
     let borrow = ethers.BigNumber.from(0);
     if (pool.name === "USDT") {
       try {
@@ -424,13 +424,17 @@ async function calculateCompound() {
       }
     }
 
+    // Не вызываем decimals()!
     const [cBal, exchangeRate, collateralFactor] = await Promise.all([
       cToken.balanceOf(userAddress),
       cToken.exchangeRateStored(),
       getCompoundCollateralFactor(pool.address)
     ]);
 
-    const suppliedUnderlying = cBal.mul(exchangeRate).div(ethers.BigNumber.from(10).pow(18 + 8 - pool.underlyingDecimals));
+    // Расчёт supplied
+    const suppliedUnderlying = cBal.mul(exchangeRate).div(
+      ethers.BigNumber.from(10).pow(18 + 8 - pool.underlyingDecimals)
+    );
     const supplied = parseFloat(ethers.utils.formatUnits(suppliedUnderlying, pool.underlyingDecimals));
     const borrowed = parseFloat(ethers.utils.formatUnits(borrow, pool.underlyingDecimals));
     let suppliedUSD = supplied;
