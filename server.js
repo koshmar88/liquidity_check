@@ -116,7 +116,7 @@ app.post("/webhook", async (req, res) => {
     await sendTelegramMessage("👋 Привет! Я буду уведомлять тебя о резких изменениях ликвидности. Используй команду /status для проверки.", userId);
   } else if (message === "/hf") {
     try {
-      const { hf, collateral, borrow, breakdown, liquidationEthPrice, ethPrice } = await calculateHealthFactor();
+      const { hf, collateral, borrow, portfolio, breakdown, liquidationEthPrice, ethPrice } = await calculateHealthFactor();
 
       let text = `📉 Текущий Health Factor: ${hf}\n\n`;
       text += `💼 Общий залог: $${collateral.toFixed(2)}\n💣 Общий долг: $${borrow.toFixed(2)}\n`;
