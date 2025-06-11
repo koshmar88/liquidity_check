@@ -54,7 +54,7 @@ const aavePools = [
   { name: "USDT", aToken: "0x3Ed3B47Dd13EC9a98b44e6204A523E766B225811", variableDebtToken: "0x619beb58998eD2278e08620f97007e1116D5D25b", decimals: 6 },
   { name: "USDC", aToken: "0xBcca60bB61934080951369a648Fb03DF4F96263C", variableDebtToken: "0x619beb58998eD2278e08620f97007e1116D5D25b", decimals: 6 },
   { name: "DAI",  aToken: "0x028171bCA77440897B824Ca71D1c56E803B653a9", variableDebtToken: "0x6C3e4cb2E96B01F4b866965A91ed4437839A121a", decimals: 18 },
-  { name: "ETH",  aToken: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", variableDebtToken: "0x77ca01483f379E58174739308945f044e1a764dc", decimals: 18 }
+  { name: "ETH",  aToken: "0x3a3A65aAb0dd2A17E3F1947bA16138cd37d08c04", variableDebtToken: "0xF63B34710400CAd3e044cFfDcAb00a0f32E33eCf", decimals: 18 }
 ];
 
 const lastCashValues = {};
