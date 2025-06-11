@@ -439,7 +439,7 @@ async function calculateAave() {
 // Итоговая функция
 async function calculateAllHealthFactors() {
   const iron = await calculateIronBank();
-  const compound = await calculateCompound();
+  const compound = await calculateCompoundV3AllCollaterals(userAddress); // замените на вашу новую функцию
   const aave = await calculateAave();
   return [iron, compound, aave];
 }
