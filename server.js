@@ -175,10 +175,21 @@ const cTokenAbi = [
 ];
 const userAddress = selfMonitor.address;
 
+// Кэш для цены ETH
+let cachedEthPrice = null;
+let lastEthPriceUpdate = 0;
+const ETH_PRICE_CACHE_MS = 60_000; // 1 минута
+
 async function getEthPrice() {
-  // Можно заменить на свой источник, если нужно
-  const { data } = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd");
-  return data.ethereum.usd;
+  const now = Date.now();
+  if (cachedEthPrice && now - lastEthPriceUpdate < ETH_PRICE_CACHE_MS) {
+    return cachedEthPrice;
+  }
+  // Получаем цену ETH через Binance API
+  const { data } = await axios.get("https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT");
+  cachedEthPrice = parseFloat(data.price);
+  lastEthPriceUpdate = now;
+  return cachedEthPrice;
 }
 
 async function calculateHealthFactor() {
