@@ -270,8 +270,11 @@ async function calculateHealthFactor() {
     }
 
     // Считаем supply для всех активов с collateral factor
+    let totalSuppliedUSD = 0; // сумма всех вложений без CF
+
     if (suppliedUSD > 0) {
-      totalCollateralUSD += suppliedUSD * collateralFactor;
+      totalSuppliedUSD += suppliedUSD; // без CF!
+      totalCollateralUSD += suppliedUSD * collateralFactor; // с CF
       breakdown.push(`${pool.name}: 🟢 $${suppliedUSD.toFixed(2)} (${supplied.toFixed(4)} ${pool.name}) × CF ${collateralFactor}`);
     }
 
@@ -292,7 +295,7 @@ async function calculateHealthFactor() {
   }
 
   // Новый расчёт портфеля
-  let portfolio = totalCollateralUSD - totalBorrowUSD;
+  let portfolio = totalSuppliedUSD - totalBorrowUSD;
 
   return {
     hf: hf.toFixed(4),
