@@ -317,7 +317,7 @@ const collaterals = [
   { name: "ETH", address: "0xc0c73a184b2e0e9117af8d2c3c5d98c24e9b835d", decimals: 18 },
   { name: "WBTC", address: "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599", decimals: 8 },
   { name: "wstETH", address: "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0", decimals: 18 }
-];g
+];
 async function calculateCompoundV3(userAddress) {
   try {
     let totalCollateralUSD = 0;
