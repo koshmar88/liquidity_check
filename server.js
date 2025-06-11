@@ -355,10 +355,6 @@ async function calculateCompoundV3(address) {
         console.error("Ошибка при расчете Health Factor:", error);
     }
 }
-
-// Вводим адрес пользователя для анализа
-const userAddress = "0x2a4cE5BaCcB98E5F95D37F8B3D1065754E0389CD"; // Замените на адрес вашего пользователя
-
 calculateCompoundV3(userAddress).then((healthFactor) => {
     console.log("Health Factor пользователя:", healthFactor);
 });
