@@ -301,7 +301,7 @@ async function calculateIronBank() {
 }
 
 // Подключение провайдера
-const cometAddress = "0xA17581A9E3356d9A858b789D68B4d866e593aE94"; // Compound v3 USDT Comet
+const cometAddress = "0xc3d688B66703497DAA19211EEdff47f25384cdc3"; // Compound v3 USDT Comet
 
 const cometAbi = [
   "function borrowBalanceOf(address) view returns (uint256)",
