@@ -209,7 +209,16 @@ async function getEthPrice() {
   lastEthPriceUpdate = now;
   return cachedEthPrice;
 }
-
+async function getWstethPrice() {
+  // Через CoinGecko API
+  const { data } = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=staked-ether&vs_currencies=usd");
+  return data["staked-ether"].usd;
+}
+async function getWbtcPrice() {
+  // Получаем цену WBTC через Binance API
+  const { data } = await axios.get("https://api.binance.com/api/v3/ticker/price?symbol=WBTCUSDT");
+  return parseFloat(data.price);
+}
 const comptrollerAddress = "0xAB1c342C7bf5Ec5F02ADEA1c2270670bCa144CbB";
 const comptrollerAbi = [
   "function markets(address cToken) view returns (bool isListed, uint256 collateralFactorMantissa, bool isComped)"
@@ -297,16 +306,6 @@ async function calculateIronBank() {
     liquidationEthPrice,
     ethPrice
   };
-}
-async function getWstethPrice() {
-  // Через CoinGecko API
-  const { data } = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=staked-ether&vs_currencies=usd");
-  return data["staked-ether"].usd;
-}
-async function getWbtcPrice() {
-  // Получаем цену WBTC через Binance API
-  const { data } = await axios.get("https://api.binance.com/api/v3/ticker/price?symbol=WBTCUSDT");
-  return parseFloat(data.price);
 }
 // Аналогично для Compound:
 const Web3 = require('web3');
