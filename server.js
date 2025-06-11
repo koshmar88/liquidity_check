@@ -298,7 +298,16 @@ async function calculateIronBank() {
     ethPrice
   };
 }
-
+async function getWstethPrice() {
+  // Через CoinGecko API
+  const { data } = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=staked-ether&vs_currencies=usd");
+  return data["staked-ether"].usd;
+}
+async function getWbtcPrice() {
+  // Получаем цену WBTC через Binance API
+  const { data } = await axios.get("https://api.binance.com/api/v3/ticker/price?symbol=WBTCUSDT");
+  return parseFloat(data.price);
+}
 // Аналогично для Compound:
 const Web3 = require('web3');
 const web3 = new Web3('https://eth-mainnet.g.alchemy.com/v2/7QH7n3H4DakNuBQsKL8IcLRHDTGzG_oJ');
@@ -450,15 +459,4 @@ async function getAavePosition(pool) {
     console.warn(`⚠️ Не удалось получить borrow для ${pool.name}:`, e.message);
   }
   return { supplied, borrowed };
-}
-
-async function getWstethPrice() {
-  // Через CoinGecko API
-  const { data } = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=staked-ether&vs_currencies=usd");
-  return data["staked-ether"].usd;
-}
-async function getWbtcPrice() {
-  // Получаем цену WBTC через Binance API
-  const { data } = await axios.get("https://api.binance.com/api/v3/ticker/price?symbol=WBTCUSDT");
-  return parseFloat(data.price);
 }
