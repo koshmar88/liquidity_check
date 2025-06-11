@@ -312,14 +312,12 @@ async function calculateCompound() {
   for (const pool of compoundPools) {
     const cToken = new ethers.Contract(pool.address, cTokenAbi, provider);
 
-    // Получаем borrow только для USDT (и других стейблов, если нужно)
+    // Получение borrow
     let borrow = ethers.BigNumber.from(0);
-    if (pool.name === "USDT") {
-      try {
-        borrow = await cToken.borrowBalanceStored(userAddress);
-      } catch (e) {
-        console.warn(`⚠️ Не удалось получить borrow для ${pool.name}:`, e.message);
-      }
+    try {
+      borrow = await cToken.borrowBalanceStored(userAddress);
+    } catch (e) {
+      console.warn(`⚠️ Не удалось получить borrow для ${pool.name}:`, e.message);
     }
 
     const [cBal, exchangeRate, collateralFactor] = await Promise.all([
@@ -328,44 +326,48 @@ async function calculateCompound() {
       getCompoundCollateralFactor(pool.address)
     ]);
 
-    // ВАЖНО: используем pool.underlyingDecimals!
     const suppliedUnderlying = cBal.mul(exchangeRate).div(
       ethers.BigNumber.from(10).pow(18 + 8 - pool.underlyingDecimals)
     );
     const supplied = parseFloat(ethers.utils.formatUnits(suppliedUnderlying, pool.underlyingDecimals));
     const borrowed = parseFloat(ethers.utils.formatUnits(borrow, pool.underlyingDecimals));
+
     let suppliedUSD = supplied;
     let borrowedUSD = borrowed;
 
     if (pool.name === "ETH") {
       suppliedUSD = supplied * ethPrice;
-      borrowedUSD = 0;
-    }
-    if (pool.name === "WBTC") {
+      borrowedUSD = borrowed * ethPrice;
+    } else if (pool.name === "WBTC") {
       if (!wbtcPrice) wbtcPrice = await getWbtcPrice();
       suppliedUSD = supplied * wbtcPrice;
-      borrowedUSD = 0;
-    }
-    if (pool.name === "wstETH") {
+      borrowedUSD = borrowed * wbtcPrice;
+    } else if (pool.name === "wstETH") {
       if (!wstethPrice) wstethPrice = await getWstethPrice();
       suppliedUSD = supplied * wstethPrice;
-      borrowedUSD = 0;
+      borrowedUSD = borrowed * wstethPrice;
     }
 
+    // Добавляем лог
+    console.log(`[Compound] ${pool.name}: supplied $${suppliedUSD.toFixed(2)}, borrowed $${borrowedUSD.toFixed(2)}`);
+
+    // Учет supply
     if (suppliedUSD > 0) {
       totalSuppliedUSD += suppliedUSD;
       totalCollateralUSD += suppliedUSD * collateralFactor;
       breakdown.push(`${pool.name}: 🟢 $${suppliedUSD.toFixed(2)} (${supplied.toFixed(4)} ${pool.name}) × CF ${collateralFactor}`);
     }
+
+    // Учет borrow
     if (borrowedUSD > 0) {
       totalBorrowUSD += borrowedUSD;
       breakdown.push(`${pool.name}: 🔴 $${borrowedUSD.toFixed(2)} (${borrowed.toFixed(4)} ${pool.name})`);
     }
   }
 
-  let hf = totalBorrowUSD > 0 ? totalCollateralUSD / totalBorrowUSD : 0;
-  let portfolio = totalSuppliedUSD - totalBorrowUSD;
-  return {
+  const hf = totalBorrowUSD > 0 ? totalCollateralUSD / totalBorrowUSD : 0;
+  const portfolio = totalSuppliedUSD - totalBorrowUSD;
+  const result = {
     protocol: "Compound",
     hf: hf.toFixed(4),
     collateral: totalCollateralUSD,
@@ -373,7 +375,10 @@ async function calculateCompound() {
     portfolio,
     breakdown
   };
+
+  return result;
 }
+
 
 // Аналогично для Aave:
 async function calculateAave() {
@@ -475,9 +480,4 @@ async function getWstethPrice() {
   // Через CoinGecko API
   const { data } = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=staked-ether&vs_currencies=usd");
   return data["staked-ether"].usd;
-}
-
-async function getWbtcPrice() {
-  const { data } = await axios.get("https://api.binance.com/api/v3/ticker/price?symbol=WBTCUSDT");
-  return parseFloat(data.price);
 }
