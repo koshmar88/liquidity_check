@@ -234,7 +234,7 @@ async function calculateHealthFactor() {
   for (const pool of ironBankPools) {
     const cToken = new ethers.Contract(pool.address, cTokenAbi, provider);
 
-    const [cBal, borrow, exchangeRate, cTokenDecimals, collateralFactor] = await Promise.all([
+    const [cBal, borrow, exchangeRate, collateralFactor] = await Promise.all([
       cToken.balanceOf(userAddress),
       cToken.borrowBalanceStored(userAddress),
       cToken.exchangeRateStored(),
@@ -334,7 +334,7 @@ async function calculateIronBank() {
 
   for (const pool of ironBankPools) {
     const cToken = new ethers.Contract(pool.address, cTokenAbi, provider);
-    const [cBal, borrow, exchangeRate, cTokenDecimals, collateralFactor] = await Promise.all([
+    const [cBal, borrow, exchangeRate, collateralFactor] = await Promise.all([
       cToken.balanceOf(userAddress),
       cToken.borrowBalanceStored(userAddress),
       cToken.exchangeRateStored(),
