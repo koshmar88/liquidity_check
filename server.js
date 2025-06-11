@@ -405,38 +405,54 @@ async function getCompoundCollateralFactor(cTokenAddress) {
 async function calculateCompound() {
   let totalCollateralUSD = 0;
   let totalBorrowUSD = 0;
+  let totalSuppliedUSD = 0;
   let ethPrice = await getEthPrice();
   let wbtcPrice = null;
   let wstethPrice = null;
   let breakdown = [];
+
   for (const pool of compoundPools) {
     const cToken = new ethers.Contract(pool.address, cTokenAbi, provider);
-    const [cBal, borrow, exchangeRate, collateralFactor] = await Promise.all([
+
+    // Получаем только borrow для USDT (и других стейблов, если нужно)
+    let borrow = ethers.BigNumber.from(0);
+    if (pool.name === "USDT") {
+      try {
+        borrow = await cToken.borrowBalanceStored(userAddress);
+      } catch (e) {
+        console.warn(`⚠️ Не удалось получить borrow для ${pool.name}:`, e.message);
+      }
+    }
+
+    const [cBal, exchangeRate, collateralFactor] = await Promise.all([
       cToken.balanceOf(userAddress),
-      cToken.borrowBalanceStored(userAddress),
       cToken.exchangeRateStored(),
       getCompoundCollateralFactor(pool.address)
     ]);
+
     const suppliedUnderlying = cBal.mul(exchangeRate).div(ethers.BigNumber.from(10).pow(18 + 8 - pool.underlyingDecimals));
     const supplied = parseFloat(ethers.utils.formatUnits(suppliedUnderlying, pool.underlyingDecimals));
     const borrowed = parseFloat(ethers.utils.formatUnits(borrow, pool.underlyingDecimals));
     let suppliedUSD = supplied;
     let borrowedUSD = borrowed;
+
     if (pool.name === "ETH") {
       suppliedUSD = supplied * ethPrice;
-      borrowedUSD = borrowed * ethPrice;
+      borrowedUSD = 0; // не учитываем borrow
     }
     if (pool.name === "WBTC") {
       if (!wbtcPrice) wbtcPrice = await getWbtcPrice();
       suppliedUSD = supplied * wbtcPrice;
-      borrowedUSD = borrowed * wbtcPrice;
+      borrowedUSD = 0; // не учитываем borrow
     }
     if (pool.name === "wstETH") {
       if (!wstethPrice) wstethPrice = await getWstethPrice();
       suppliedUSD = supplied * wstethPrice;
-      borrowedUSD = borrowed * wstethPrice;
+      borrowedUSD = 0; // не учитываем borrow
     }
+
     if (suppliedUSD > 0) {
+      totalSuppliedUSD += suppliedUSD;
       totalCollateralUSD += suppliedUSD * collateralFactor;
       breakdown.push(`${pool.name}: 🟢 $${suppliedUSD.toFixed(2)} (${supplied.toFixed(4)} ${pool.name}) × CF ${collateralFactor}`);
     }
@@ -445,8 +461,9 @@ async function calculateCompound() {
       breakdown.push(`${pool.name}: 🔴 $${borrowedUSD.toFixed(2)} (${borrowed.toFixed(4)} ${pool.name})`);
     }
   }
+
   let hf = totalBorrowUSD > 0 ? totalCollateralUSD / totalBorrowUSD : 0;
-  let portfolio = totalCollateralUSD - totalBorrowUSD;
+  let portfolio = totalSuppliedUSD - totalBorrowUSD;
   return {
     protocol: "Compound",
     hf: hf.toFixed(4),
