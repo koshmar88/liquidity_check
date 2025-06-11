@@ -1,6 +1,10 @@
 const ethers = require("ethers");
 const axios = require("axios");
 const fs = require("fs");
+const express = require("express");
+
+const app = express();
+app.use(express.json());
 
 const selfMonitor = {
   address: "0x2a4cE5BaCcB98E5F95D37F8B3D1065754E0389CD",
@@ -85,174 +89,64 @@ async function checkLiquidity() {
   }
 }
 
-async function handleBotCommands() {
-  try {
-    const res = await axios.get(`https://api.telegram.org/bot${BOT_TOKEN}/getUpdates`);
-    const updates = res.data.result;
+app.post("/webhook", async (req, res) => {
+  const update = req.body;
+  const message = update.message?.text?.trim();
+  const userId = update.message?.chat?.id;
 
-    if (!updates.length) return;
+  if (!message || !userId) return res.sendStatus(200);
 
-    const lastUpdate = updates[updates.length - 1];
-    const message = lastUpdate.message?.text?.trim();
-    const userId = lastUpdate.message?.chat?.id;
+  if (!ACTIVE_CHAT_ID) {
+    ACTIVE_CHAT_ID = userId.toString();
+    console.log("💾 chat_id сохранён:", ACTIVE_CHAT_ID);
+  }
 
-    if (!message || !userId) return;
-
-    await axios.get(`https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=${lastUpdate.update_id + 1}`);
-
-    if (!ACTIVE_CHAT_ID) {
-      ACTIVE_CHAT_ID = userId.toString();
-      console.log("💾 chat_id сохранён:", ACTIVE_CHAT_ID);
-    }
-
-    if (message === "/status") {
-      let text = "📊 Ликвидность по пулам:\n";
-      for (const pool of pools) {
-        try {
-          const cash = await getCash(pool);
-          text += `${pool.name}: ${cash.toLocaleString(undefined, { maximumFractionDigits: 2 })} USD\n`;
-        } catch {
-          text += `${pool.name}: ошибка получения данных\n`;
-        }
-      }
-      await sendTelegramMessage(text, userId);
-    } else if (message === "/start") {
-      await sendTelegramMessage("👋 Привет! Я буду уведомлять тебя о резких изменениях ликвидности. Используй команду /status для проверки.", userId);
-    } else if (message === "/hf") {
+  if (message === "/status") {
+    let text = "📊 Ликвидность по пулам:\n";
+    for (const pool of pools) {
       try {
-        const { hf, collateral, borrow, breakdown, liquidationEthPrice, ethPrice } = await calculateHealthFactor();
-
-        let text = `📉 Текущий Health Factor: ${hf}\n\n`;
-        text += `💼 Общий залог: $${collateral.toFixed(2)}\n💣 Общий долг: $${borrow.toFixed(2)}\n\n`;
-
-        for (const line of breakdown) {
-          text += `• ${line}\n`;
-        }
-
-        text += `\n📈 Цена ETH: $${ethPrice.toFixed(2)}\n`;
-
-        if (liquidationEthPrice) {
-          text += `⚠️ Ликвидация при цене ETH ≈ $${liquidationEthPrice.toFixed(2)}`;
-        } else {
-          text += `✅ До ликвидации далеко`;
-        }
-
-        await sendTelegramMessage(text, userId);
-      } catch (err) {
-        console.error("❌ Ошибка в calculateHealthFactor:", err);
-        await sendTelegramMessage("❌ Ошибка при расчёте Health Factor. Проверьте логи сервера.", userId);
+        const cash = await getCash(pool);
+        text += `${pool.name}: ${cash.toLocaleString(undefined, { maximumFractionDigits: 2 })} USD\n`;
+      } catch {
+        text += `${pool.name}: ошибка получения данных\n`;
       }
-    } // ←←← ДОБАВЬТЕ ЭТУ СКОБКУ
-
-    // Остальной код должен быть вне блока /hf!
-  } catch (err) {
-    console.error("❌ Ошибка в handleBotCommands:", err);
-  }
-}
-
-async function getEthPrice() {
-  try {
-    const res = await axios.get(
-      "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd"
-    );
-    return res.data.ethereum.usd;
-  } catch (e) {
-    console.error("❌ Не удалось получить цену ETH:", e.message);
-    return 0;
-  }
-}
-
-async function calculateHealthFactor() {
-  const ethPrice = await getEthPrice();
-
-  const comptrollerAddress = "0xAB1c342C7bf5Ec5F02ADEA1c2270670bCa144CbB";
-  const comptrollerAbi = ["function markets(address) view returns (bool, uint256, bool)"];
-  const cTokenAbi = [
-    "function balanceOf(address) view returns (uint256)",
-    "function borrowBalanceStored(address) view returns (uint256)",
-    "function exchangeRateStored() view returns (uint256)"
-  ];
-
-  const comptroller = new ethers.Contract(comptrollerAddress, comptrollerAbi, provider);
-  const user = selfMonitor.address;
-  const breakdown = [];
-
-  let totalCollateral = 0;
-  let totalBorrow = 0;
-  let ethCollateral = 0;
-  let ethBorrowAmount = 0;
-
-  for (const pool of pools) {
-    const cToken = new ethers.Contract(pool.address, cTokenAbi, provider);
-    const [cBal, borrow, rate] = await Promise.all([
-      cToken.balanceOf(user),
-      cToken.borrowBalanceStored(user),
-      cToken.exchangeRateStored()
-    ]);
-
-    const [, factor] = await comptroller.markets(pool.address);
-
-    // Приводим к числам
-    const cTokenBal = cBal; // raw BigNumber
-    const exchangeRate = rate; // raw BigNumber
-
-    // suppliedUnderlying = (cTokenBal * exchangeRate) / 10^(18 + 8 - pool.decimals)
-    const suppliedUnderlying = cTokenBal
-      .mul(exchangeRate)
-      .div(ethers.BigNumber.from(10).pow(18 + 8 - pool.decimals));
-
-    // Переводим в float для отображения
-    const suppliedUnderlyingFloat = parseFloat(ethers.utils.formatUnits(suppliedUnderlying, pool.decimals));
-
-    // suppliedUnderlying в underlying токене (например, ETH, USDC)
-    const suppliedUSD = pool.name === "ETH"
-      ? suppliedUnderlyingFloat * ethPrice
-      : suppliedUnderlyingFloat;
-
-    const collateralUSD = suppliedUSD * (factor / 1e18);
-
-    // borrow всегда в underlying токене
-    const borrowAmount = parseFloat(ethers.utils.formatUnits(borrow, pool.decimals));
-    const borrowUSD = pool.name === "ETH"
-      ? borrowAmount * ethPrice
-      : borrowAmount;
-
-    totalCollateral += collateralUSD;
-    totalBorrow += borrowUSD;
-
-    if (pool.name === "ETH") {
-      ethCollateral = collateralUSD;
-      ethBorrowAmount = borrowAmount;
     }
+    await sendTelegramMessage(text, userId);
+  } else if (message === "/start") {
+    await sendTelegramMessage("👋 Привет! Я буду уведомлять тебя о резких изменениях ликвидности. Используй команду /status для проверки.", userId);
+  } else if (message === "/hf") {
+    try {
+      const { hf, collateral, borrow, breakdown, liquidationEthPrice, ethPrice } = await calculateHealthFactor();
 
-    breakdown.push(
-      `${pool.name}: 🟢 $${collateralUSD.toFixed(2)} (${suppliedUnderlyingFloat.toFixed(4)} ${pool.name}) | 🔴 $${borrowUSD.toFixed(2)}`
-    );
+      let text = `📉 Текущий Health Factor: ${hf}\n\n`;
+      text += `💼 Общий залог: $${collateral.toFixed(2)}\n💣 Общий долг: $${borrow.toFixed(2)}\n\n`;
 
-    console.log(
-      `[${pool.name}] cTokenBal: ${cTokenBal.toString()}, exchangeRate: ${exchangeRate.toString()}, suppliedUnderlying: ${suppliedUnderlyingFloat}, borrowAmount: ${borrowAmount}, suppliedUSD: ${suppliedUSD}, collateralUSD: ${collateralUSD}, borrowUSD: ${borrowUSD}`
-    );
+      for (const line of breakdown) {
+        text += `• ${line}\n`;
+      }
+
+      text += `\n📈 Цена ETH: $${ethPrice.toFixed(2)}\n`;
+
+      if (liquidationEthPrice) {
+        text += `⚠️ Ликвидация при цене ETH ≈ $${liquidationEthPrice.toFixed(2)}`;
+      } else {
+        text += `✅ До ликвидации далеко`;
+      }
+
+      await sendTelegramMessage(text, userId);
+    } catch (err) {
+      console.error("❌ Ошибка в calculateHealthFactor:", err);
+      await sendTelegramMessage("❌ Ошибка при расчёте Health Factor. Проверьте логи сервера.", userId);
+    }
   }
 
-  const hf = totalBorrow === 0 ? "∞" : (totalCollateral / totalBorrow).toFixed(4);
+  res.sendStatus(200);
+});
 
-  let liquidationEthPrice = null;
-  if (ethCollateral > 0 && ethBorrowAmount > 0) {
-    const nonEthCollateral = totalCollateral - ethCollateral;
-    const nonEthBorrow = totalBorrow - ethBorrowAmount * ethPrice;
-    liquidationEthPrice = (ethCollateral - nonEthBorrow) / ethBorrowAmount;
-    if (liquidationEthPrice < 0) liquidationEthPrice = null;
-  }
-
-  return {
-    hf,
-    collateral: totalCollateral,
-    borrow: totalBorrow,
-    breakdown,
-    liquidationEthPrice,
-    ethPrice
-  };
-}
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log("Express server started on port", PORT);
+});
 
 // Тест подключения к сети
 (async () => {
@@ -266,11 +160,9 @@ async function calculateHealthFactor() {
 
 // Запуск циклов
 setInterval(checkLiquidity, CHECK_INTERVAL_MS);
-setInterval(handleBotCommands, 8000);
 setInterval(checkSelfHealth, CHECK_INTERVAL_MS);
 
 checkLiquidity();
-handleBotCommands();
 function checkSelfHealth() {
   // Пока функция не реализована, чтобы не было ошибки
 }
