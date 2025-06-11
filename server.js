@@ -499,6 +499,7 @@ async function calculateCompoundV3AllCollaterals(address) {
   try {
     // Получаем общий borrow (USDT)
     const borrowBalance = await comet.methods.borrowBalanceOf(address).call();
+    console.log("borrowBalance (raw):", borrowBalance);
 
     // Массив активов
     const assets = [
@@ -512,24 +513,38 @@ async function calculateCompoundV3AllCollaterals(address) {
 
     for (const asset of assets) {
       try {
-        // Получаем баланс коллатерала
         const collateralBalance = await comet.methods.collateralBalanceOf(address, asset.address).call();
+        console.log(`collateralBalance (${asset.name}):`, collateralBalance);
+
         if (collateralBalance === "0") continue;
 
-        // Получаем информацию об активе
         const assetInfo = await comet.methods.getAssetInfoByAddress(asset.address).call();
         const collateralFactor = assetInfo.collateralFactor || assetInfo[2];
         const scale = assetInfo.scale || assetInfo[1];
-
-        // Получаем цену актива
         const assetPrice = await comet.methods.getPrice(asset.address).call();
 
-        // Определяем decimals по scale (например, 1e18 → 18)
+        // Логируем параметры актива
+        console.log({
+          asset: asset.name,
+          collateralBalance,
+          assetInfo,
+          collateralFactor,
+          scale,
+          assetPrice
+        });
+
         const decimals = scale ? Math.round(Math.log10(Number(scale))) : 18;
         const balanceNorm = Number(collateralBalance) / (10 ** decimals);
-        const priceNorm = Number(assetPrice) / 1e8; // Comet price обычно 8 знаков
+        const priceNorm = Number(assetPrice) / 1e8;
 
-        // USD value с учётом collateralFactor
+        // Логируем нормализованные значения
+        console.log({
+          asset: asset.name,
+          decimals,
+          balanceNorm,
+          priceNorm
+        });
+
         const collateralUSD = balanceNorm * priceNorm * (Number(collateralFactor) / 1e18);
 
         totalCollateralUSD += collateralUSD;
@@ -540,9 +555,15 @@ async function calculateCompoundV3AllCollaterals(address) {
       }
     }
 
-    // Итоговый health factor
-    const borrowNorm = Number(borrowBalance) / 1e6; // USDT в Comet обычно 6 знаков
+    const borrowNorm = Number(borrowBalance) / 1e6;
     const hf = borrowNorm > 0 ? totalCollateralUSD / borrowNorm : 0;
+
+    // Итоговые значения
+    console.log({
+      totalCollateralUSD,
+      borrowNorm,
+      hf
+    });
 
     return {
       protocol: "Compound v3",
