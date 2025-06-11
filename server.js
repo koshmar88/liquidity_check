@@ -41,7 +41,7 @@ const ironBankPools = [
 
 // Пример для Compound (замените адреса на актуальные для вашей сети)
 const compoundPools = [
-  { name: "USDT", address: "0xf650C3d88Cc8617A7bD0D0d6fA41a6C7eCfC3bC1", decimals: 8, underlyingDecimals: 6 },
+  { name: "USDT", address: "0xf650C3d88Cc8617A7bD0D2eEDe386dC8110dF8aA", decimals: 8, underlyingDecimals: 6 },
   { name: "USDC", address: "0x39AA39c021dfbaE8faC545936693aC917d5E7563", decimals: 8, underlyingDecimals: 6 },
   { name: "DAI", address: "0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643", decimals: 8, underlyingDecimals: 18 },
   { name: "ETH", address: "0x4Dd26482738bE6C06C31467a19dcdA9AD781e8C4", decimals: 8, underlyingDecimals: 18 },
