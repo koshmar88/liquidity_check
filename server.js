@@ -1,7 +1,7 @@
 const ethers = require("ethers");
 const axios = require("axios");
 const fs = require("fs");
-/
+
 const selfMonitor = {
   address: "0x2a4cE5BaCcB98E5F95D37F8B3D1065754E0389CD",
   lastStatus: "safe"
