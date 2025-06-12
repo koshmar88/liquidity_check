@@ -257,7 +257,7 @@ async function calculateIronBank() {
 
     let suppliedUSD = supplied;
     let borrowedUSD = borrowed;
-
+r
     if (pool.name === "ETH") {
       suppliedUSD = supplied * ethPrice;
       borrowedUSD = borrowed * ethPrice;
@@ -301,22 +301,27 @@ async function calculateIronBank() {
 }
 
 // Подключение провайдера
-const cometAddress = "0xA17581A9E3356d9A858b789D68B4d866e593aE94"; // Compound v3 USDT Comet
+const cometAddress = "0x3Afdc9BCA9213A35503b077a6072F3D0d5AB0840"; // Compound v3 USDT Comet
 
 const cometAbi = [
   "function borrowBalanceOf(address) view returns (uint256)",
   "function collateralBalanceOf(address, address) view returns (uint256)",
-  "function getAssetInfoByAddress(address) view returns (uint128, uint96, uint64)",
+  "function getAssetInfoByAddress(address) view returns (uint128 offset, uint96 scale, uint64 collateralFactor)",
   "function getPrice(address) view returns (uint256)"
 ];
-
 const comet = new ethers.Contract(cometAddress, cometAbi, provider);
+
+console.log(`Обработка актива ${asset.name} (${asset.address}):`, {
+  collateralBalance: collateralBalance.toString(),
+  assetInfo,
+  assetPrice: assetPrice.toString()
+});
 
 // Коллатералы и их decimals
 const collaterals = [
-  { name: "ETH", address: "0xc0c73a184b2e0e9117af8d2c3c5d98c24e9b835d", decimals: 18 },
+  { name: "ETH", address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", decimals: 18 },
   { name: "WBTC", address: "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599", decimals: 8 },
-  { name: "wstETH", address: "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0", decimals: 18 }
+  { name: "wstETH", address: "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0", decimals: 18 }
 ];
 async function calculateCompoundV3(userAddress) {
   try {
